@@ -7,6 +7,8 @@ import os
 import h5py
 import numpy as np
 
+__all__ = ['Z_SUN', 'BeneMassAgeZMaps']
+
 # Solar metallicity
 Z_SUN = 0.0134
 
