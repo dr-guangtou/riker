@@ -6,8 +6,10 @@ import os
 
 import numpy as np
 
-from . import profile
-from . import utils
+from astropy.table import Table, Column
+
+from riker import profile
+from riker import utils
 
 
 __all__ = [
@@ -166,7 +168,7 @@ class GalaxyMap(object):
         # Here we have three configuration parameters:
         # threshold, bkg_ratio, bkg_filter
         detect = profile.detect_galaxy(
-            self.info, self.maps['mass_{}'.format(map_type)], kernel=kernel,
+            self.info, self.maps["mass_{}".format(map_type)], kernel=kernel,
             threshold=threshold, bkg_ratio=bkg_ratio, bkg_filter=bkg_filter,
             **detect_kwargs)
 
@@ -198,17 +200,16 @@ class GalaxyMap(object):
 
         """
         # Get the basic information
-        detect = getattr(self, 'detect_{}'.format(map_type))
+        detect = getattr(self, "detect_{}".format(map_type))
         if map_type is not 'gal' and using_gal:
             detect = getattr(self, 'detect_gal')
 
         # If not basic information is available, run the detection again.
         if detect is None:
-            detect = self.detect(
-                self.maps['mass_{}'.format(map_type)], output=True, **detect_kwargs)
+            detect = self.detect(map_type, output=True, **detect_kwargs)
 
-        # Here we have 5 configuration parameters:
-        # n_rad, linear, r_min, r_max, subpix
+        # Here we have 1 configuration parameter:
+        # subpix
         _, maper = profile.aperture_masses(
             self.info, self.maps['mass_{}'.format(map_type)],
             detect=detect, rad=self.rad_out, subpix=subpix)
@@ -268,12 +269,72 @@ class GalaxyMap(object):
         if output:
             return prof
 
-    def aper_summary(self):
+    def aper_summary(self, cen_only=False, subpix=5, output=False):
         """Get all the stellar mass, age, and metallicity profiles.
-        """
-        pass
 
-    def maps_to_fits(self, data_type, map_type, folder=None):
+        Parameters
+        ----------
+        subpix : int, optional
+            Subpixel sampling factor. Default is 5.
+
+        """
+        # Aperture mass profiles
+        self.maper('gal', subpix=subpix, using_gal=True)
+        if not cen_only:
+            self.maper('ins', subpix=subpix, using_gal=True)
+            self.maper('exs', subpix=subpix, using_gal=True)
+
+        # Aperture age profiles
+        self.aprof('age', 'gal', subpix=subpix, using_gal=True)
+        if not cen_only:
+            self.aprof('age', 'ins', subpix=subpix, using_gal=True)
+            self.aprof('age', 'exs', subpix=subpix, using_gal=True)
+
+        # Aperture metallicity profiles
+        self.aprof('met', 'gal', subpix=subpix, using_gal=True)
+        if not cen_only:
+            self.aprof('met', 'ins', subpix=subpix, using_gal=True)
+            self.aprof('met', 'exs', subpix=subpix, using_gal=True)
+
+        # Gather these results into an Astropy Table
+        aper_sum = Table()
+        aper_sum.add_column(Column(data=self.rad_inn, name='rad_inn'))
+        aper_sum.add_column(Column(data=self.rad_out, name='rad_out'))
+        aper_sum.add_column(Column(data=self.rad_mid, name='rad_mid'))
+
+        aper_sum.add_column(Column(data=self.maper_gal, name='maper_gal'))
+        if not cen_only:
+            aper_sum.add_column(Column(data=self.maper_ins, name='maper_ins'))
+            aper_sum.add_column(Column(data=self.maper_exs, name='maper_exs'))
+
+        aper_sum.add_column(Column(data=self.age_prof_gal['prof_w'], name='age_gal_w'))
+        aper_sum.add_column(Column(data=self.age_prof_gal['prof'], name='age_gal'))
+        aper_sum.add_column(Column(data=self.age_prof_gal['flag'], name='age_gal_flag'))
+        if not cen_only:
+            aper_sum.add_column(Column(data=self.age_prof_ins['prof_w'], name='age_ins_w'))
+            aper_sum.add_column(Column(data=self.age_prof_ins['prof'], name='age_ins'))
+            aper_sum.add_column(Column(data=self.age_prof_ins['flag'], name='age_ins_flag'))
+            aper_sum.add_column(Column(data=self.age_prof_exs['prof_w'], name='age_exs_w'))
+            aper_sum.add_column(Column(data=self.age_prof_exs['prof'], name='age_exs'))
+            aper_sum.add_column(Column(data=self.age_prof_exs['flag'], name='age_exs_flag'))
+        aper_sum.add_column(Column(data=self.met_prof_gal['prof_w'], name='met_gal_w'))
+        aper_sum.add_column(Column(data=self.met_prof_gal['prof'], name='met_gal'))
+        aper_sum.add_column(Column(data=self.met_prof_gal['flag'], name='met_gal_flag'))
+
+        if not cen_only:
+            aper_sum.add_column(Column(data=self.met_prof_ins['prof_w'], name='met_ins_w'))
+            aper_sum.add_column(Column(data=self.met_prof_ins['prof'], name='met_ins'))
+            aper_sum.add_column(Column(data=self.met_prof_ins['flag'], name='met_ins_flag'))
+            aper_sum.add_column(Column(data=self.met_prof_exs['prof_w'], name='met_exs_w'))
+            aper_sum.add_column(Column(data=self.met_prof_exs['prof'], name='met_exs'))
+            aper_sum.add_column(Column(data=self.met_prof_exs['flag'], name='met_exs_flag'))
+
+        setattr(self, 'aper_sum', aper_sum.as_array())
+
+        if output:
+            return aper_sum
+
+    def map_to_fits(self, data_type, map_type, folder=None):
         """Save a 2-D map into a FITS file.
 
         Parameters
@@ -292,11 +353,34 @@ class GalaxyMap(object):
 
         # Name of the output file
         fits_name = os.path.join(
-            folder, "{}_{}_{}_{}_{}.fits".format(
-                self.prefix, self.idx, self.proj, data_type, map_type))
+            folder, "{}_{}_{}_{}_{}_{}.fits".format(
+                self.prefix, self.idx, self.info['catsh_id'],
+                self.proj, data_type, map_type))
 
         utils.save_to_fits(self.maps['{}_{}'.format(data_type, map_type)], fits_name)
         if not os.path.isfile(fits_name):
             raise FileNotFoundError("# Did not save the FITS file successfully!")
 
         return fits_name
+
+    def ell_prof(self, map_type):
+        """Run Ellipse on the stellar mass map.
+
+        Parameters
+        ----------
+        map_type : str
+            Type of the stellar mass map. Options ['gal'|'ins'|'exs']
+
+        """
+        fits_name = self.map_to_fits('mass', map_type, folder=None)
+
+        # Step 2 & 3 for central galaxy
+        ell_2, ell_3, _, _ = profile.get_1d_prof(
+            fits_name, self.detect_gal, isophote=profile.ISO, xttools=profile.TBL,
+            pix=self.info['pix'], ini_sma=6.0, max_sma=175.0, step=0.2, mode='mean')
+
+        # Clean up a little
+        folder, file_name = os.path.split(fits_name)
+        utils.clean_after_ellipse(folder, file_name.replace('.fits', ''))
+
+        return ell_2, ell_3

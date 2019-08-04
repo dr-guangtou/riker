@@ -2,16 +2,30 @@
 # -*- coding: utf-8 -*-
 """Get 1-D profiles from the maps."""
 
+import os
 import copy
 
 import numpy as np
 import sep
 
+import kungpao
+from kungpao.galsbp import galSBP
+
+from riker import utils
+
 __all__ = [
-    'detect_galaxy', 
-    'aperture_masses', 
-    'mass_weighted_prof'
-    ]
+    'detect_galaxy',
+    'aperture_masses',
+    'mass_weighted_prof',
+    'TBL', 'ISO',
+]
+
+# Right now, galSBP still depends on IRAF, need to point it to the correct
+# Binary file
+IRAF_DIR = os.path.join(
+    os.path.split(kungpao.__file__)[0], 'iraf/{}/'.format(utils.linux_or_mac()))
+TBL = os.path.join(IRAF_DIR, 'x_ttools.e')
+ISO = os.path.join(IRAF_DIR, 'x_isophote.e')
 
 
 def detect_galaxy(info, mass_map, kernel=None, threshold=1e8,
@@ -186,5 +200,51 @@ def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7, mask=None):
         mass_map, aper['x'], aper['y'], 1.0, aper['ba'],
         aper['theta'], r_inn, r_out, mask=mask, subpix=subpix)
 
-    return {'prof_w': sum_data_w / sum_mass_map, 
+    return {'prof_w': sum_data_w / sum_mass_map,
             'prof': sum_data / n_pix_eff, 'flag': flag}
+
+
+def get_1d_prof(fits_name, aper, isophote=ISO, xttools=TBL, pix=1.0,
+                ini_sma=15.0, max_sma=175., step=0.2, mode='mean'):
+    """Get Step 2 and Step 3 1-D profile from the stellar mass map.
+
+    Parameters
+    ----------
+
+    """
+    # Just use the center from the aperture result
+    xcen, ycen = aper['x'], aper['y']
+    # Initial values of b/a and position angle are from the aperture result too.
+    ba, pa = aper['ba'], aper['pa'] + 90.0
+    if pa >= 90.0:
+        pa = pa - 180.
+    elif pa <= -90.0:
+        pa = pa + 180.
+
+    try:
+        # Step 2 to get ellipticity and position angle profiles
+        ell_2, bin_2 = galSBP.galSBP(
+            fits_name, galX=xcen, galY=ycen, maxSma=max_sma, iniSma=ini_sma,
+            verbose=False, savePng=False, saveOut=True, expTime=1.0,
+            pix=pix, zpPhoto=0.0, galQ=ba, galPA=pa, stage=2,
+            minSma=0.0, ellipStep=step, isophote=isophote, xttools=xttools,
+            uppClip=2.5, lowClip=3.0, maxTry=5, nClip=2, intMode=mode,
+            updateIntens=False, harmonics=True)
+    except Exception:
+        print("# Something went wrong during stage 2 for {}".format(fits_name))
+        ell_2, bin_2 = None, None
+
+    try:
+        # Step 3 to get mass density profiles
+        ell_3, bin_3 = galSBP.galSBP(
+            fits_name, galX=xcen, galY=ycen, maxSma=max_sma, iniSma=ini_sma,
+            verbose=False, savePng=False, saveOut=True, expTime=1.0,
+            pix=pix, zpPhoto=0.0, galQ=ba, galPA=pa, stage=3,
+            minSma=0.0, ellipStep=step, isophote=isophote, xttools=xttools,
+            uppClip=2.5, lowClip=3.0, maxTry=3, nClip=2, intMode=mode,
+            updateIntens=False, harmonics=True)
+    except Exception:
+        print("# Something went wrong during stage 3 for {}".format(fits_name))
+        ell_3, bin_3 = None, None
+
+    return ell_2, ell_3, bin_2, bin_3
