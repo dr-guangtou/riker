@@ -8,8 +8,9 @@ import numpy as np
 
 from astropy.table import Table, Column, join
 
-from riker import profile
 from riker import utils
+from riker import config
+from riker import profile
 
 
 __all__ = [
@@ -43,10 +44,17 @@ class GalaxyMap(object):
         Index of the galaxy to be analyzed.
     proj : str, optional
         Projection of the 2-D map. Default: 'xy'
+    config_file : str, optional
+        A yaml configuration file.
+    rad : ndarray, optional
+        Radial bins used for aperture measurements.
+    aper_force : dict, optional
+        Dictionary that contains external shape information of the galaxy. Default: None.
 
     """
 
-    def __init__(self, hdf5, idx, proj='xy'):
+    def __init__(self, hdf5, idx, proj='xy', config_file=None,
+                 rad=None, aper_force=None):
         """Gather basic information and all the maps.
         """
         # Parent directory to keep the files
@@ -67,16 +75,21 @@ class GalaxyMap(object):
         # Projection of the 2-D map
         self.proj = proj
 
+        # Configuration parameters
+        self.config = config.BeneMassAgeZConfig(config_file=config_file)
+
         # Gather all the maps and the basic information
         self.info, self.maps = hdf5.get_maps(self.idx, self.proj)
 
         # Design the radial bins
-        # TODO: control this using config dict
-        self.rad_bins = None
+        self.rad_bins = rad
         self.rad_inn = None
         self.rad_out = None
         self.rad_mid = None
-        self.radial_bins(rad=None, n_rad=15, r_min=0.01, r_max=None, linear=False)
+        self.radial_bins(rad=rad)
+
+        # Externally provided galaxy information
+        self.aper_force = aper_force
 
         # Placeholder for results
         # Basic information
@@ -99,15 +112,33 @@ class GalaxyMap(object):
         self.met_prof_ins = None
         self.met_prof_exs = None
 
+        # Ellipse results for the whole galaxy
+        self.ell_shape_gal = None
+        self.ell_mprof_gal = None
+        self.bin_mprof_gal = None
 
-    def radial_bins(self, rad=None, n_rad=15, r_min=0.1, r_max=None, linear=False,
-                    output=False):
+        # Ellipse results for the in-situ component
+        self.ell_shape_ins = None
+        self.ell_mprof_ins = None
+
+        # Ellipse results for the ex-situ component
+        self.ell_shape_exs = None
+        self.ell_mprof_exs = None
+
+
+    def radial_bins(self, rad=None, output=False):
         """Design radial bins to get aperture profiles.
 
         Parameters
         ----------
         rad : ndarray, optional
             Array of boundaries for radius bins in unit of kpc. Default: None.
+        output : bool, optional
+            Return the `detect` dictionary when True. Default: False
+
+        Configuration Parameters
+        ------------------------
+        Can be found in `self.config`:
         n_rad : int, optional
             Number of radial bins. Default: 15.
         linear : bool, optional
@@ -122,13 +153,17 @@ class GalaxyMap(object):
         """
         # Get the radial bins in unit of kpc
         if rad is None:
-            if r_max is None:
-                r_max = self.info['img_w'] / 2.0
-            if linear:
-                rad = np.linspace(r_min, r_max * self.info['pix'], (n_rad + 1))
+            if self.config.r_max is None:
+                self.config.r_max = self.info['img_w'] / 2.0
+            if self.config.linear:
+                rad = np.linspace(
+                    self.config.r_min, self.config.r_max * self.info['pix'],
+                    (self.config.n_rad + 1))
             else:
                 rad = np.logspace(
-                    np.log10(r_min), np.log10(r_max * self.info['pix']), (n_rad + 1))
+                    np.log10(self.config.r_min),
+                    np.log10(self.config.r_max * self.info['pix']),
+                    (self.config.n_rad + 1))
 
         # Arrays of inner and outer radius
         r_inn, r_out = rad[:-1], rad[1:]
@@ -144,8 +179,7 @@ class GalaxyMap(object):
         if output:
             return rad
 
-    def detect(self, map_type, verbose=False, kernel=KERNEL, threshold=1e8,
-               bkg_ratio=10, bkg_filter=5, output=False, **detect_kwargs):
+    def detect(self, map_type, verbose=False, kernel=KERNEL, output=False, **detect_kwargs):
         """Detect the galaxy and get basic properties.
 
         Parameters
@@ -154,16 +188,20 @@ class GalaxyMap(object):
             Type of the stellar mass map. Options ['gal'|'ins'|'exs']
         kernel : ndarray, optional
             2-D kernel used for detecting the galaxy. Default: None
+        verbose : bool, optional
+            Blah, Blah, Blah. Default: False
+        output : bool, optional
+            Return the `detect` dictionary when True. Default: False
+
+        Configuration Parameters
+        ------------------------
+        Can be found in `self.config`:
         threshold : float, optional
             Mass threshold for detecting the galaxy. Default: 1E8
         bkg_ratio : int, optional
             Ratio between the image size and sky box size. Default: 10
         bkg_filter : int, optional
             Filter size for sky background. Default: 5
-        verbose : bool, optional
-            Blah, Blah, Blah. Default: False
-        output : bool, optional
-            Return the `detect` dictionary when True. Default: False
 
         Return
         ------
@@ -176,8 +214,8 @@ class GalaxyMap(object):
         # threshold, bkg_ratio, bkg_filter
         detect = profile.detect_galaxy(
             self.info, self.maps["mass_{}".format(map_type)], kernel=kernel,
-            threshold=threshold, bkg_ratio=bkg_ratio, bkg_filter=bkg_filter,
-            **detect_kwargs)
+            threshold=self.config.threshold, bkg_ratio=self.config.bkg_ratio,
+            bkg_filter=self.config.bkg_filter, **detect_kwargs)
 
         if verbose:
             print("# Detection for {}".format(map_type))
@@ -188,27 +226,30 @@ class GalaxyMap(object):
         if output:
             return detect
 
-    def maper(self, map_type, verbose=False, using_gal=True, subpix=5,
-              output=False, **detect_kwargs):
+    def maper(self, map_type, verbose=False, output=False, **detect_kwargs):
         """Get aperture stellar mass curves from the stellar mass map.
 
         Parameters
         ----------
         map_type : str
             Type of the stellar mass map. Options ['gal'|'ins'|'exs']
-        using_gal : bool, optional
-            Using the basic information of the whole galaxy. Default: True.
-        subpix : int, optional
-            Subpixel sampling factor. Default is 5.
         verbose : bool, optional
             Blah, Blah, Blah. Default: False
         output : bool, optional
             Return the `maper` array when True. Default: False
 
+        Configuration Parameters
+        ------------------------
+        Can be found in `self.config`:
+        using_gal : bool, optional
+            Using the basic information of the whole galaxy. Default: True.
+        subpix : int, optional
+            Subpixel sampling factor. Default is 5.
+
         """
         # Get the basic information
         detect = getattr(self, "detect_{}".format(map_type))
-        if map_type is not 'gal' and using_gal:
+        if map_type is not 'gal' and self.config.using_gal:
             detect = getattr(self, 'detect_gal')
 
         # If not basic information is available, run the detection again.
@@ -219,7 +260,7 @@ class GalaxyMap(object):
         # subpix
         _, maper = profile.aperture_masses(
             self.info, self.maps['mass_{}'.format(map_type)],
-            detect=detect, rad=self.rad_out, subpix=subpix)
+            detect=detect, rad=self.rad_out, subpix=self.config.subpix)
 
         if verbose:
             print("# Aperture masses for {}".format(map_type))
@@ -230,8 +271,7 @@ class GalaxyMap(object):
         if output:
             return maper
 
-    def aprof(self, data_type, map_type, using_gal=True, subpix=5, mask=None,
-              output=False, verbose=False, **detect_kwargs):
+    def aprof(self, data_type, map_type, output=False, verbose=False, **detect_kwargs):
         """Get the average profiles of a property using pre-defined apertures.
 
         Parameters
@@ -240,21 +280,23 @@ class GalaxyMap(object):
             Galaxy property to be used. `age` for stellar age, `met` for stellar metallicity.
         map_type : str
             Type of the stellar mass map. Options ['gal'|'ins'|'exs']
-        using_gal : bool, optional
-            Using the basic information of the whole galaxy. Default: True.
-        subpix : int, optional
-            Subpixel sampling factor. Default: 5.
-        mask : ndarray, optional
-            Mask array.
         verbose : bool, optional
             Blah, Blah, Blah. Default: False
         output : bool, optional
             Return the `maper` array when True. Default: False
 
+        Configuration Parameters
+        ------------------------
+        Can be found in `self.config`:
+        using_gal : bool, optional
+            Using the basic information of the whole galaxy. Default: True.
+        subpix : int, optional
+            Subpixel sampling factor. Default: 5.
+
         """
         # Get the basic information
         detect = getattr(self, 'detect_{}'.format(map_type))
-        if map_type is not 'gal' and using_gal:
+        if map_type is not 'gal' and self.config.using_gal:
             detect = getattr(self, 'detect_gal')
 
         # If not basic information is available, run the detection again.
@@ -265,7 +307,7 @@ class GalaxyMap(object):
         prof = profile.mass_weighted_prof(
             self.maps['{}_{}'.format(data_type, map_type)],
             self.maps['mass_{}'.format(map_type)], detect, self.rad_inn, self.rad_out,
-            subpix=subpix, mask=mask)
+            subpix=self.config.subpix)
 
         if verbose:
             print("# {} profile for {}".format(data_type, map_type))
@@ -276,36 +318,40 @@ class GalaxyMap(object):
         if output:
             return prof
 
-    def aper_summary(self, gal_only=False, subpix=5, output=False):
+    def aper_summary(self, gal_only=False, output=False):
         """Get all the stellar mass, age, and metallicity profiles.
 
         Parameters
         ----------
         gal_only: bool, optional
             Only provide summary of the whole galaxy. Default: False.
-        subpix : int, optional
-            Subpixel sampling factor. Default is 5.
         output : bool, optional
             Return the `maper` array when True. Default: False
 
+        Configuration Parameters
+        ------------------------
+        Can be found in `self.config`:
+        subpix : int, optional
+            Subpixel sampling factor. Default is 5.
+
         """
         # Aperture mass profiles
-        self.maper('gal', subpix=subpix, using_gal=True)
+        self.maper('gal', subpix=self.config.subpix, using_gal=self.config.using_gal)
         if not gal_only:
-            self.maper('ins', subpix=subpix, using_gal=True)
-            self.maper('exs', subpix=subpix, using_gal=True)
+            self.maper('ins', subpix=self.config.subpix, using_gal=self.config.using_gal)
+            self.maper('exs', subpix=self.config.subpix, using_gal=self.config.using_gal)
 
         # Aperture age profiles
-        self.aprof('age', 'gal', subpix=subpix, using_gal=True)
+        self.aprof('age', 'gal', subpix=self.config.subpix, using_gal=self.config.using_gal)
         if not gal_only:
-            self.aprof('age', 'ins', subpix=subpix, using_gal=True)
-            self.aprof('age', 'exs', subpix=subpix, using_gal=True)
+            self.aprof('age', 'ins', subpix=self.config.subpix, using_gal=self.config.using_gal)
+            self.aprof('age', 'exs', subpix=self.config.subpix, using_gal=self.config.using_gal)
 
         # Aperture metallicity profiles
-        self.aprof('met', 'gal', subpix=subpix, using_gal=True)
+        self.aprof('met', 'gal', subpix=self.config.subpix, using_gal=self.config.using_gal)
         if not gal_only:
-            self.aprof('met', 'ins', subpix=subpix, using_gal=True)
-            self.aprof('met', 'exs', subpix=subpix, using_gal=True)
+            self.aprof('met', 'ins', subpix=self.config.subpix, using_gal=self.config.using_gal)
+            self.aprof('met', 'exs', subpix=self.config.subpix, using_gal=self.config.using_gal)
 
         # Gather these results into an Astropy Table
         aper_sum = Table()
@@ -386,14 +432,29 @@ class GalaxyMap(object):
 
         """
         # Ellipse run for the whole galaxy
-        ell_shape_gal, ell_mprof_gal, bin_shape_gal, bin_mprof_gal = self.ell_prof(
-            'gal')
-        # TODO
-        pass
+        self.ell_prof('gal', remove_bin=False)
+
+        if not gal_only:
+            # Ellipse run for the in-situ component
+            self.ell_prof('ins', remove_bin=True, in_ellip=self.bin_mprof_gal)
+
+            # Ellipse run for the ex-situ component
+            self.ell_prof('exs', remove_bin=True, in_ellip=self.bin_mprof_gal)
+
+        ell_sum = {
+            'gal_shape': self.ell_shape_gal, 'gal_mprof': self.ell_mprof_gal,
+            'ins_shape': self.ell_shape_ins, 'ins_mprof': self.ell_mprof_ins,
+            'exs_shape': self.ell_shape_exs, 'exs_mprof': self.ell_mprof_exs,
+        }
+        
+        setattr(self. 'ell_sum', ell_sum)
+
+        if output:
+            return ell_sum
+
 
     def ell_prof(self, map_type, isophote=profile.ISO, xttools=profile.TBL,
-                 ini_sma=15.0, max_sma=175.0, step=0.2, mode='mean',
-                 remove_bin=False, aper_force=None, in_ellip=None):
+                 remove_bin=False, in_ellip=None, output=False):
         """Run Ellipse on the stellar mass map.
 
         Parameters
@@ -406,6 +467,16 @@ class GalaxyMap(object):
             Location of the binary executable file: `x_ttools.e`. Default: TBL
         pix : float, optional
             Pixel scale. Default: 1.0.
+        remove_bin : bool, optional
+            Remove the output binary file or not. Default: False.
+        in_ellip : str, optional
+            Input binary table from previous Ellipse run. Default: None
+        output : bool, optional
+            Return the `maper` array when True. Default: False
+
+        Configuration Parameters
+        ------------------------
+        Can be found in `self.config`:
         ini_sma : float, optional
             Initial radii to start the fitting. Default: 15.0.
         max_sma : float, optional
@@ -415,12 +486,6 @@ class GalaxyMap(object):
         mode : str, optional
             Integration mode for Ellipse fitting. Options: ['mean'|'median'|'bi-linear'].
             Default: 'mean'.
-        remove_bin : bool, optional
-            Remove the output binary file or not. Default: False.
-        aper_force : dict, optional
-            Dictionary that contains external shape information of the galaxy. Default: None.
-        in_ellip : str, optional
-            Input binary table from previous Ellipse run. Default: None
 
         """
         # Save the file to a FITS image
@@ -429,8 +494,9 @@ class GalaxyMap(object):
         # Get the isophotal shape and mass density profiles.
         ell_shape, ell_mprof, bin_shape, bin_mprof = profile.ell_prof(
             fits_name, self.detect_gal, isophote=isophote, xttools=xttools,
-            pix=self.info['pix'], ini_sma=ini_sma, max_sma=max_sma, step=step,
-            mode=mode, aper_force=aper_force, in_ellip=in_ellip)
+            pix=self.info['pix'], ini_sma=self.config.ini_sma,
+            max_sma=self.config.max_sma, step=self.config.step,
+            mode=self.config.mode, aper_force=self.aper_force, in_ellip=in_ellip)
 
         # Clean up a little
         folder, file_name = os.path.split(fits_name)
@@ -447,4 +513,10 @@ class GalaxyMap(object):
         ell_mprof_new = join(
             ell_mprof[ELL_COL_USE], fourier_mprof, keys='index', join_type='inner')
 
-        return ell_shape_new, ell_mprof_new, bin_shape, bin_mprof
+        setattr(self, 'ell_shape_{}'.format(map_type), ell_shape_new.as_array())
+        setattr(self, 'ell_mprof_{}'.format(map_type), ell_mprof_new.as_array())
+        if map_type == 'gal':
+            setattr(self. 'bin_mprof_gal', bin_mprof)
+
+        if output:
+            return ell_shape_new, ell_mprof_new, bin_shape, bin_mprof
