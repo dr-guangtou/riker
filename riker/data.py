@@ -7,7 +7,10 @@ import os
 import h5py
 import numpy as np
 
-__all__ = ['Z_SUN', 'BeneMassAgeZMaps']
+__all__ = [
+    'BeneMassAgeZMaps',
+    'Z_SUN',
+    ]
 
 # Solar metallicity
 Z_SUN = 0.0134
@@ -91,7 +94,8 @@ class BeneMassAgeZMaps(object):
             'logms': np.log10(self.data['scalar_star_mass'][idx]),
             'logm200c': np.log10(self.data['catgrp_Group_M_Crit200'][idx]),
             'age': self.data['scalar_star_age'][idx],
-            'metallicity': self.data['scalar_star_metallicity'][idx]
+            'metallicity': self.data['scalar_star_metallicity'][idx],
+            'pix':self.pix
         }
 
     def get_maps(self, idx, proj, verbose=False):
