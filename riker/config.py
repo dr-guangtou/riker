@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """Configurations of the analysis."""
 
-import os
 import yaml
 
 __all__ = [
@@ -55,12 +54,15 @@ class BeneMassAgeZConfig(object):
                         else DEFAULT_MAP_CONFIG['rad']['linear'])
 
         # Parameters about detecting the galaxy
-        self._threshold = (self.config['detect']['threshold'] if 'threshold' in self.config['detect']
-                           else DEFAULT_MAP_CONFIG['detect']['threshold'])
-        self._bkg_ratio = (self.config['detect']['bkg_ratio'] if 'bkg_ratio' in self.config['detect']
-                           else DEFAULT_MAP_CONFIG['detect']['bkg_ratio'])
-        self._bkg_filter = (self.config['detect']['bkg_filter'] if 'bkg_filter' in self.config['detect']
-                            else DEFAULT_MAP_CONFIG['detect']['bkg_filter'])
+        self._threshold = (
+            self.config['detect']['threshold'] if 'threshold' in self.config['detect']
+            else DEFAULT_MAP_CONFIG['detect']['threshold'])
+        self._bkg_ratio = (
+            self.config['detect']['bkg_ratio'] if 'bkg_ratio' in self.config['detect']
+            else DEFAULT_MAP_CONFIG['detect']['bkg_ratio'])
+        self._bkg_filter = (
+            self.config['detect']['bkg_filter'] if 'bkg_filter' in self.config['detect']
+            else DEFAULT_MAP_CONFIG['detect']['bkg_filter'])
 
         # Parameters about the aperture profiles
         self._using_gal = (self.config['aper']['using_gal'] if 'using_gal' in self.config['aper']
@@ -196,7 +198,7 @@ class BeneMassAgeZConfig(object):
         self._mode = mode
 
 
-def parse_config(conig_file):
+def parse_config(config_file):
     """Parse the `yaml` format configuration file.
 
     Parameters

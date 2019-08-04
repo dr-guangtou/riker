@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 """Visualization of the results."""
 
+import numpy as np
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 from matplotlib.gridspec import GridSpec
@@ -9,6 +11,8 @@ from matplotlib.ticker import NullFormatter, FormatStrFormatter
 from matplotlib import rcParams
 
 from kungpao.display import display_single
+
+from riker.data import Z_SUN
 
 plt.rc('text', usetex=True)
 rcParams.update({'axes.linewidth': 1.5})

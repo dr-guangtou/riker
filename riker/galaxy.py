@@ -447,7 +447,7 @@ class GalaxyMap(object):
             'exs_shape': self.ell_shape_exs, 'exs_mprof': self.ell_mprof_exs,
         }
         
-        setattr(self. 'ell_sum', ell_sum)
+        setattr(self, 'ell_sum', ell_sum)
 
         if output:
             return ell_sum
