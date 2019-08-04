@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 
-from astropy.table import Table, Column
+from astropy.table import Table, Column, join
 
 from riker import profile
 from riker import utils
@@ -23,6 +23,13 @@ KERNEL = np.asarray([[0.092163, 0.221178, 0.296069, 0.221178, 0.092163],
                      [0.296069, 0.710525, 0.951108, 0.710525, 0.296069],
                      [0.221178, 0.530797, 0.710525, 0.530797, 0.221178],
                      [0.092163, 0.221178, 0.296069, 0.221178, 0.092163]])
+
+# Useful columns from the Ellipse output
+ELL_COL_USE = [
+    'index', 'sma', 'intens', 'int_err', 'ell', 'ell_err', 'pa', 'pa_err',
+    'x0', 'x0_err', 'y0', 'y0_err', 'stop', 'tflux_e', 'tflux_c',
+    'pa_norm', 'growth_ori'
+]
 
 
 class GalaxyMap(object):
@@ -269,30 +276,34 @@ class GalaxyMap(object):
         if output:
             return prof
 
-    def aper_summary(self, cen_only=False, subpix=5, output=False):
+    def aper_summary(self, gal_only=False, subpix=5, output=False):
         """Get all the stellar mass, age, and metallicity profiles.
 
         Parameters
         ----------
+        gal_only: bool, optional
+            Only provide summary of the whole galaxy. Default: False.
         subpix : int, optional
             Subpixel sampling factor. Default is 5.
+        output : bool, optional
+            Return the `maper` array when True. Default: False
 
         """
         # Aperture mass profiles
         self.maper('gal', subpix=subpix, using_gal=True)
-        if not cen_only:
+        if not gal_only:
             self.maper('ins', subpix=subpix, using_gal=True)
             self.maper('exs', subpix=subpix, using_gal=True)
 
         # Aperture age profiles
         self.aprof('age', 'gal', subpix=subpix, using_gal=True)
-        if not cen_only:
+        if not gal_only:
             self.aprof('age', 'ins', subpix=subpix, using_gal=True)
             self.aprof('age', 'exs', subpix=subpix, using_gal=True)
 
         # Aperture metallicity profiles
         self.aprof('met', 'gal', subpix=subpix, using_gal=True)
-        if not cen_only:
+        if not gal_only:
             self.aprof('met', 'ins', subpix=subpix, using_gal=True)
             self.aprof('met', 'exs', subpix=subpix, using_gal=True)
 
@@ -303,14 +314,14 @@ class GalaxyMap(object):
         aper_sum.add_column(Column(data=self.rad_mid, name='rad_mid'))
 
         aper_sum.add_column(Column(data=self.maper_gal, name='maper_gal'))
-        if not cen_only:
+        if not gal_only:
             aper_sum.add_column(Column(data=self.maper_ins, name='maper_ins'))
             aper_sum.add_column(Column(data=self.maper_exs, name='maper_exs'))
 
         aper_sum.add_column(Column(data=self.age_prof_gal['prof_w'], name='age_gal_w'))
         aper_sum.add_column(Column(data=self.age_prof_gal['prof'], name='age_gal'))
         aper_sum.add_column(Column(data=self.age_prof_gal['flag'], name='age_gal_flag'))
-        if not cen_only:
+        if not gal_only:
             aper_sum.add_column(Column(data=self.age_prof_ins['prof_w'], name='age_ins_w'))
             aper_sum.add_column(Column(data=self.age_prof_ins['prof'], name='age_ins'))
             aper_sum.add_column(Column(data=self.age_prof_ins['flag'], name='age_ins_flag'))
@@ -321,7 +332,7 @@ class GalaxyMap(object):
         aper_sum.add_column(Column(data=self.met_prof_gal['prof'], name='met_gal'))
         aper_sum.add_column(Column(data=self.met_prof_gal['flag'], name='met_gal_flag'))
 
-        if not cen_only:
+        if not gal_only:
             aper_sum.add_column(Column(data=self.met_prof_ins['prof_w'], name='met_ins_w'))
             aper_sum.add_column(Column(data=self.met_prof_ins['prof'], name='met_ins'))
             aper_sum.add_column(Column(data=self.met_prof_ins['flag'], name='met_ins_flag'))
@@ -363,24 +374,77 @@ class GalaxyMap(object):
 
         return fits_name
 
-    def ell_prof(self, map_type):
+    def ell_summary(self, gal_only=False, output=False):
+        """Gather all necessary Ellipse profiles.
+
+        Parameters
+        ----------
+        gal_only: bool, optional
+            Only provide summary of the whole galaxy. Default: False.
+        output : bool, optional
+            Return the `maper` array when True. Default: False
+
+        """
+        # Ellipse run for the whole galaxy
+        ell_shape_gal, ell_mprof_gal, bin_shape_gal, bin_mprof_gal = self.ell_prof(
+            'gal')
+        # TODO
+        pass
+
+    def ell_prof(self, map_type, isophote=profile.ISO, xttools=profile.TBL,
+                 ini_sma=15.0, max_sma=175.0, step=0.2, mode='mean',
+                 remove_bin=False, aper_force=None, in_ellip=None):
         """Run Ellipse on the stellar mass map.
 
         Parameters
         ----------
         map_type : str
             Type of the stellar mass map. Options ['gal'|'ins'|'exs']
+        isophote : str, optional
+            Location of the binary executable file: `x_isophote.e`. Default: ISO
+        xttools : str, optional
+            Location of the binary executable file: `x_ttools.e`. Default: TBL
+        pix : float, optional
+            Pixel scale. Default: 1.0.
+        ini_sma : float, optional
+            Initial radii to start the fitting. Default: 15.0.
+        max_sma : float, optional
+            Maximum fitting radius. Default: 175.0.
+        step : float, optional
+            Fitting step size foro Ellipse. Default: 0.2.
+        mode : str, optional
+            Integration mode for Ellipse fitting. Options: ['mean'|'median'|'bi-linear'].
+            Default: 'mean'.
+        remove_bin : bool, optional
+            Remove the output binary file or not. Default: False.
+        aper_force : dict, optional
+            Dictionary that contains external shape information of the galaxy. Default: None.
+        in_ellip : str, optional
+            Input binary table from previous Ellipse run. Default: None
 
         """
+        # Save the file to a FITS image
         fits_name = self.map_to_fits('mass', map_type, folder=None)
 
-        # Step 2 & 3 for central galaxy
-        ell_2, ell_3, _, _ = profile.get_1d_prof(
-            fits_name, self.detect_gal, isophote=profile.ISO, xttools=profile.TBL,
-            pix=self.info['pix'], ini_sma=6.0, max_sma=175.0, step=0.2, mode='mean')
+        # Get the isophotal shape and mass density profiles.
+        ell_shape, ell_mprof, bin_shape, bin_mprof = profile.ell_prof(
+            fits_name, self.detect_gal, isophote=isophote, xttools=xttools,
+            pix=self.info['pix'], ini_sma=ini_sma, max_sma=max_sma, step=step,
+            mode=mode, aper_force=aper_force, in_ellip=in_ellip)
 
         # Clean up a little
         folder, file_name = os.path.split(fits_name)
-        utils.clean_after_ellipse(folder, file_name.replace('.fits', ''))
+        utils.clean_after_ellipse(
+            folder, file_name.replace('.fits', ''), remove_bin=remove_bin)
 
-        return ell_2, ell_3
+        # Calculate the Fourier amplitude information
+        fourier_shape = profile.fourier_profile(ell_shape, pix=self.info['pix'])
+        fourier_mprof = profile.fourier_profile(ell_mprof, pix=self.info['pix'])
+
+        # Join the useful columns from the Ellipse output with the Fourier amplitudes.
+        ell_shape_new = join(
+            ell_shape[ELL_COL_USE], fourier_shape, keys='index', join_type='inner')
+        ell_mprof_new = join(
+            ell_mprof[ELL_COL_USE], fourier_mprof, keys='index', join_type='inner')
+
+        return ell_shape_new, ell_mprof_new, bin_shape, bin_mprof
