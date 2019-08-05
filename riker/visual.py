@@ -228,8 +228,14 @@ def show_aper(info, aper, figsize=(8, 18), rad_min=5.5, rad_max=170.):
 
     _ = ax1.set_xlim(rad_min ** 0.25, rad_max ** 0.25)
 
-    mbins_arr = np.stack(
-        [np.log10(aper['mprof_ins'][rad_mask]), np.log10(aper['mprof_exs'][rad_mask])])
+    # `mprof` could be 0.0 in the outskirt for some compact galaxies
+    # Setup a threshold to filter out those data points.
+    ins_mask = aper['mprof_ins'] >= 1e7
+    exs_mask = aper['mprof_exs'] >= 1e7
+
+    mbins_arr = np.concatenate(
+        [np.log10(aper['mprof_ins'][rad_mask & ins_mask]),
+         np.log10(aper['mprof_exs'][rad_mask & exs_mask])], axis=None)
     _ = ax1.set_ylim(np.nanmin(mbins_arr) * 0.95, np.nanmax(mbins_arr) * 1.05)
     _ = ax1.set_ylabel(r'$\log [M_{\star}/M_{\odot}]$', fontsize=28)
 

@@ -233,10 +233,18 @@ class GalaxyMap(object):
         # Basic geometry information of the galaxy
         # Here we have three configuration parameters:
         # threshold, bkg_ratio, bkg_filter
-        detect = profile.detect_galaxy(
-            self.info, self.maps["mass_{}".format(map_type)], kernel=kernel,
-            threshold=self.config.threshold, bkg_ratio=self.config.bkg_ratio,
-            bkg_filter=self.config.bkg_filter, **detect_kwargs)
+        try:
+            detect = profile.detect_galaxy(
+                self.info, self.maps["mass_{}".format(map_type)], kernel=kernel,
+                threshold=self.config.threshold, bkg_ratio=self.config.bkg_ratio,
+                bkg_filter=self.config.bkg_filter, **detect_kwargs)
+        except ValueError:
+            # Sometimes the pre-defined threshold can be too high for the galaxy
+            new_threshold = np.nanmax(self.maps["mass_{}".format(map_type)]) / 20.0
+            detect = profile.detect_galaxy(
+                self.info, self.maps["mass_{}".format(map_type)], kernel=kernel,
+                threshold=new_threshold, bkg_ratio=self.config.bkg_ratio,
+                bkg_filter=self.config.bkg_filter, **detect_kwargs)
 
         if verbose:
             print("# Detection for {}".format(map_type))
