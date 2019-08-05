@@ -234,7 +234,7 @@ def show_aper(info, aper, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     _ = ax1.set_ylabel(r'$\log [M_{\star}/M_{\odot}]$', fontsize=28)
 
     # Ex-situ fraction
-    fexs = aper['mprof_exs'] / (aper['mprof_ins'] + aper['mprof_exs'])
+    fexs = aper['mprof_exs'] / aper['mprof_gal']
 
     ax1_b = fig_prof.add_axes(ax1.get_position())
     ax1_b.patch.set_visible(False)
@@ -243,8 +243,8 @@ def show_aper(info, aper, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     ax1_b.tick_params(axis='y', colors='maroon')
     ax1_b.yaxis.set_label_position('right')
     ax1_b.yaxis.set_ticks_position('right')
-    ax1_b.plot(aper['rad_mid'] ** 0.25, fexs, linestyle='--', c='maroon',
-               linewidth=3.5, alpha=0.8, label=r'$\rm Ex\ situ\ fraction$')
+    ax1_b.plot(aper['rad_mid'][rad_mask] ** 0.25, fexs[rad_mask], linestyle='--',
+               c='maroon', linewidth=3.5, alpha=0.8, label=r'$\rm Ex\ situ\ fraction$')
     ax1_b.set_ylim(0.02, 0.98)
     ax1_b.legend(fontsize=22, loc='best')
 
@@ -316,24 +316,52 @@ def show_aper(info, aper, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     return fig_prof
 
 
-def prepare_show_ellipse(summary, ellip):
-    """Prepare the data for visualizing the 1-D profiles."""
-    return {'catsh_id': summary['catsh_id'],
-            'logms': summary['logms'],
-            'mass_gal': summary['maps']['mass_gal'],
-            'mass_ins': summary['maps']['mass_ins'],
-            'mass_exs': summary['maps']['mass_exs'],
-            'ell_gal_2': ellip['ell_gal_2'],
-            'ell_gal_3': ellip['ell_gal_3'],
-            'ell_ins_2': ellip['ell_ins_2'],
-            'ell_ins_3': ellip['ell_ins_3'],
-            'ell_exs_2': ellip['ell_exs_2'],
-            'ell_exs_3': ellip['ell_exs_3']
+def prepare_show_ellipse(info, maps, ell_sum):
+    """Prepare the data for visualizing the 1-D profiles.
+
+    Parameters
+    ----------
+    info : dict
+        A dictionary that contains basic information of the galaxy
+    maps : dict
+        A dictionary that contains all stellar mass, age, and metallicity maps.
+    ell_sum : dict
+        A dictionary that contains all the 1-D Ellipse profiles.
+
+    Returns
+    -------
+    ell_plot : dict
+        A dictionary that summarizes all necessary data for visualizing Ellipse profiles.
+
+    """
+    return {'catsh_id': info['catsh_id'],
+            'logms': info['logms'],
+            'pix': info['pix'],
+            'mass_gal': maps['mass_gal'],
+            'mass_ins': maps['mass_ins'],
+            'mass_exs': maps['mass_exs'],
+            'ell_gal_2': ell_sum['gal_shape'],
+            'ell_gal_3': ell_sum['gal_mprof'],
+            'ell_ins_2': ell_sum['ins_shape'],
+            'ell_ins_3': ell_sum['ins_mprof'],
+            'ell_exs_2': ell_sum['exs_mprof'],
+            'ell_exs_3': ell_sum['exs_mprof']
            }
 
 
-def overplot_ellipse(ell_plot, pix=1.0, zmin=3.5, zmax=10.5):
-    """Overplot the elliptical isophotes on the stellar mass maps."""
+def overplot_ellipse(ell_plot, zmin=3.5, zmax=10.5):
+    """Overplot the elliptical isophotes on the stellar mass maps.
+
+    Parameters
+    ----------
+    ell_plot : dict
+        A dictionary that summarizes all necessary data for visualizing Ellipse profiles.
+    zmin : float, optional
+        Minimum log10(Mass) value used to show the stellar mass map. Default: 3.5
+    zmax : float, optional
+        Maximum log10(Mass) value used to show the stellar mass map. Default: 10.5
+
+    """
     # Setup the figure
     fig = plt.figure(figsize=(10, 10))
     fig.subplots_adjust(
@@ -377,7 +405,7 @@ def overplot_ellipse(ell_plot, pix=1.0, zmin=3.5, zmax=10.5):
     ax2 = display_single(
         ell_plot['mass_gal'], ax=ax2, stretch='log10', zmin=zmin, zmax=zmax,
         cmap=IMG_CMAP, no_negative=True, color_bar=False, scale_bar=True,
-        pixel_scale=1., physical_scale=pix, scale_bar_loc='right',
+        pixel_scale=1., physical_scale=ell_plot['pix'], scale_bar_loc='right',
         scale_bar_length=50., scale_bar_color='k', scale_bar_y_offset=1.3)
 
     ax2.text(
@@ -465,8 +493,19 @@ def overplot_ellipse(ell_plot, pix=1.0, zmin=3.5, zmax=10.5):
     return fig
 
 
-def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
-    """Plot a summary plot for the ellipse result."""
+def plot_ell_prof(ell_plot, r_min=3.0, r_max=190.0):
+    """Plot a summary plot for the ellipse result.
+
+    Parameters
+    ----------
+    ell_plot : dict
+        A dictionary that summarizes all necessary data for visualizing Ellipse profiles.
+    r_min : float, optional
+        Minimum radius to plot, in unit of kpc. Default: 3.0.
+    r_max : float, optional
+        Maximum radius to plot, in unit of kpc. Default: 190.
+
+    """
     # Setup the figure and axes
     fig = plt.figure(figsize=(10, 10))
     fig.subplots_adjust(
@@ -482,7 +521,7 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
 
     if ell_plot['ell_gal_3'] is not None:
         ax1.errorbar(
-            (ell_plot['ell_gal_3']['sma'] * pix) ** 0.25,
+            ell_plot['ell_gal_3']['r_kpc'] ** 0.25,
             np.log10(ell_plot['ell_gal_3']['intens']),
             yerr=ell_plot['ell_gal_3']['sbp_err'], markersize=8,
             color='darkgrey', alpha=0.8, fmt='s', capsize=3,
@@ -490,7 +529,7 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
 
     if ell_plot['ell_ins_3'] is not None:
         ax1.errorbar(
-            (ell_plot['ell_ins_3']['sma'] * pix) ** 0.25 + 0.05,
+            ell_plot['ell_ins_3']['r_kpc'] ** 0.25 + 0.05,
             np.log10(ell_plot['ell_ins_3']['intens']),
             yerr=ell_plot['ell_ins_3']['sbp_err'], markersize=9,
             color='orangered', alpha=0.8, fmt='o', capsize=3,
@@ -498,7 +537,7 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
 
     if ell_plot['ell_exs_3'] is not None:
         ax1.errorbar(
-            (ell_plot['ell_exs_3']['sma'] * pix) ** 0.25 - 0.05,
+            ell_plot['ell_exs_3']['r_kpc'] ** 0.25 - 0.05,
             np.log10(ell_plot['ell_exs_3']['intens']),
             yerr=ell_plot['ell_exs_3']['sbp_err'], markersize=9,
             color='steelblue', alpha=0.8, fmt='h', capsize=3,
@@ -509,9 +548,9 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
     if (ell_plot['ell_gal_3'] is not None and ell_plot['ell_ins_3'] is not None and
             ell_plot['ell_exs_3'] is not None):
         mass_arr = (
-            list(ell_plot['ell_exs_3']['intens'][ell_plot['ell_exs_3']['sma'] * pix > r_min]) +
-            list(ell_plot['ell_ins_3']['intens'][ell_plot['ell_ins_3']['sma'] * pix > r_min]) +
-            list(ell_plot['ell_gal_3']['intens'][ell_plot['ell_gal_3']['sma'] * pix > r_min]))
+            list(ell_plot['ell_exs_3']['intens'][ell_plot['ell_exs_3']['r_kpc'] > r_min]) +
+            list(ell_plot['ell_ins_3']['intens'][ell_plot['ell_ins_3']['r_kpc'] > r_min]) +
+            list(ell_plot['ell_gal_3']['intens'][ell_plot['ell_gal_3']['r_kpc'] > r_min]))
         min_mass = np.nanmin(mass_arr)
         if min_mass > 100.0:
             ax1.set_ylim(np.log10(min_mass) - 0.3, np.log10(np.nanmax(mass_arr)) + 0.5)
@@ -532,26 +571,26 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
 
     if ell_plot['ell_gal_2'] is not None:
         ax2.errorbar(
-            (ell_plot['ell_gal_2']['sma'] * pix) ** 0.25, ell_plot['ell_gal_2']['ell'],
+            ell_plot['ell_gal_2']['r_kpc'] ** 0.25, ell_plot['ell_gal_2']['ell'],
             yerr=ell_plot['ell_gal_2']['ell_err'], color='darkgrey', alpha=0.7, fmt='s',
             capsize=3, capthick=1, elinewidth=2, markersize=8)
 
     if ell_plot['ell_ins_2'] is not None:
         ax2.errorbar(
-            (ell_plot['ell_ins_2']['sma'] * pix) ** 0.25 + 0.05, ell_plot['ell_ins_2']['ell'],
+            ell_plot['ell_ins_2']['r_kpc'] ** 0.25 + 0.05, ell_plot['ell_ins_2']['ell'],
             yerr=ell_plot['ell_ins_2']['ell_err'], color='orangered', alpha=0.7, fmt='o',
             capsize=3, capthick=1, elinewidth=1, markersize=9)
 
     if ell_plot['ell_exs_2'] is not None:
         ax2.errorbar(
-            (ell_plot['ell_exs_2']['sma'] * pix) ** 0.25 - 0.05, ell_plot['ell_exs_2']['ell'],
+            ell_plot['ell_exs_2']['r_kpc'] ** 0.25 - 0.05, ell_plot['ell_exs_2']['ell'],
             yerr=ell_plot['ell_exs_2']['ell_err'], color='steelblue', alpha=0.6, fmt='h',
             capsize=3, capthick=1, elinewidth=1, markersize=9)
 
     if ell_plot['ell_exs_2'] is not None and ell_plot['ell_ins_2'] is not None:
         ell_arr = (
-            list(ell_plot['ell_exs_2']['ell'][ell_plot['ell_exs_2']['sma'] * pix > r_min]) +
-            list(ell_plot['ell_ins_2']['ell'][ell_plot['ell_ins_2']['sma'] * pix > r_min]))
+            list(ell_plot['ell_exs_2']['ell'][ell_plot['ell_exs_2']['r_kpc'] > r_min]) +
+            list(ell_plot['ell_ins_2']['ell'][ell_plot['ell_ins_2']['r_kpc'] > r_min]))
         ax2.set_ylim(np.nanmin(ell_arr) - 0.05, np.nanmax(ell_arr) + 0.05)
 
     ax2.xaxis.set_major_formatter(NullFormatter())
@@ -567,26 +606,26 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
 
     if ell_plot['ell_gal_2'] is not None:
         ax3.errorbar(
-            (ell_plot['ell_gal_2']['sma'] * pix) ** 0.25, ell_plot['ell_gal_2']['pa'],
+            ell_plot['ell_gal_2']['r_kpc'] ** 0.25, ell_plot['ell_gal_2']['pa'],
             yerr=ell_plot['ell_gal_2']['pa_err'], color='darkgrey', alpha=0.7, fmt='s',
             capsize=3, capthick=1, elinewidth=2, markersize=8)
 
     if ell_plot['ell_ins_2'] is not None:
         ax3.errorbar(
-            (ell_plot['ell_ins_2']['sma'] * pix) ** 0.25 + 0.05, ell_plot['ell_ins_2']['pa'],
+            ell_plot['ell_ins_2']['r_kpc'] ** 0.25 + 0.05, ell_plot['ell_ins_2']['pa'],
             yerr=ell_plot['ell_ins_2']['pa_err'], color='orangered', alpha=0.7, fmt='o',
             capsize=3, capthick=1, elinewidth=1, markersize=9)
 
     if ell_plot['ell_exs_2'] is not None:
         ax3.errorbar(
-            (ell_plot['ell_exs_2']['sma'] * pix) ** 0.25 - 0.05, ell_plot['ell_exs_2']['pa'],
+            ell_plot['ell_exs_2']['r_kpc'] ** 0.25 - 0.05, ell_plot['ell_exs_2']['pa'],
             yerr=ell_plot['ell_exs_2']['pa_err'], color='steelblue', alpha=0.6, fmt='h',
             capsize=3, capthick=1, elinewidth=1, markersize=9)
 
     if ell_plot['ell_exs_2'] is not None and ell_plot['ell_ins_2'] is not None:
         pa_arr = (
-            list(ell_plot['ell_exs_2']['pa'][ell_plot['ell_exs_2']['sma'] * pix > r_min]) +
-            list(ell_plot['ell_ins_2']['pa'][ell_plot['ell_ins_2']['sma'] * pix > r_min]))
+            list(ell_plot['ell_exs_2']['pa'][ell_plot['ell_exs_2']['r_kpc'] > r_min]) +
+            list(ell_plot['ell_ins_2']['pa'][ell_plot['ell_ins_2']['r_kpc'] > r_min]))
         ax3.set_ylim(np.nanmin(pa_arr) - 10.0, np.nanmax(pa_arr) + 10.0)
 
     ax3.xaxis.set_major_formatter(NullFormatter())

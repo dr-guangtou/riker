@@ -3,6 +3,7 @@
 """Deal with galaxy from Illustris or TNG simulation."""
 
 import os
+import shutil
 
 import numpy as np
 
@@ -32,7 +33,7 @@ KERNEL = np.asarray([[0.092163, 0.221178, 0.296069, 0.221178, 0.092163],
 ELL_COL_USE = [
     'index', 'sma', 'intens', 'int_err', 'ell', 'ell_err', 'pa', 'pa_err',
     'x0', 'x0_err', 'y0', 'y0_err', 'stop', 'tflux_e', 'tflux_c',
-    'pa_norm', 'growth_ori'
+    'pa_norm', 'growth_ori', 'sbp_err'
 ]
 
 
@@ -139,6 +140,10 @@ class GalaxyMap(object):
         # Ellipse results for the ex-situ component
         self.ell_shape_exs = None
         self.ell_mprof_exs = None
+
+        # Summary of results
+        self.aper_sum = None
+        self.ell_sum = None
 
 
     def radial_bins(self, rad=None, output=False):
@@ -478,7 +483,6 @@ class GalaxyMap(object):
         if output:
             return ell_sum
 
-
     def ell_prof(self, map_type, isophote=profile.ISO, xttools=profile.TBL,
                  remove_bin=False, in_ellip=None, output=False):
         """Run Ellipse on the stellar mass map.
@@ -560,16 +564,132 @@ class GalaxyMap(object):
             DPI value for saving PNG figure. Default: 100.
 
         """
+        # Make sure the basic galaxy information is available
         if self.detect_gal is None:
             self.detect('gal')
 
+        # Generate the figure
         map_fig = visual.show_maps(
-            self.maps, self.detect_gal,
+            self.maps, self.detect_gal, figsize=figsize,
             cid=self.info['catsh_id'], logms=self.info['logms'])
 
+        # Save the figure in PNG format if necessary
         if savefig:
             map_fig.savefig(
                 os.path.join(self.fig_dir, "{}_maps.png".format(self.prefix)), dpi=dpi)
             plt.close(map_fig)
         else:
             return map_fig
+
+    def show_aper(self, figsize=(8, 18), savefig=False, dpi=100, rad_min=5.5, rad_max=None):
+        """Visualize the stellar mass, age, and metallicity aperture profiles
+        for all components.
+
+        Parameters
+        ----------
+        figsize : tuple, optional
+            Size of the 3x3 figure. Default: (15, 15)
+        savefig : bool, optional
+            Save a copy of the figure in PNG format. Default: False.
+        dpi : int, optional
+            DPI value for saving PNG figure. Default: 100.
+        rad_min : float, optional
+            Minimum radius to plot, in unit of kpc. Default: 5.5.
+        rad_max : float, optional
+            Maximum radius to plot, in unit of kpc. Default: None
+
+        """
+        # Make sure the aperture profiles results are available
+        if self.aper_sum is None:
+            self.aper_summary(gal_only=False)
+
+        # Maximum radii to plot
+        if rad_max is None:
+            rad_max = self.info['pix'] * self.info['img_w'] / 2.0
+
+        # Generate the figure
+        aper_fig = visual.show_aper(
+            self.info, self.aper_sum, figsize=figsize, rad_min=rad_min, rad_max=rad_max)
+
+        # Save the figure in PNG format if necessary
+        if savefig:
+            aper_fig.savefig(
+                os.path.join(self.fig_dir, "{}_aper.png".format(self.prefix)), dpi=dpi)
+            plt.close(aper_fig)
+        else:
+            return aper_fig
+
+    def show_ell(self, savefig=False, dpi=100, z_min=3.5, z_max=10.5,
+                 r_min=3.0, r_max=None, combine=False):
+        """Visualize the 1-D Ellipse profiles of all components.
+
+        Parameters
+        ----------
+        figsize : tuple, optional
+            Size of the 3x3 figure. Default: (15, 15)
+        savefig : bool, optional
+            Save a copy of the figure in PNG format. Default: False.
+        dpi : int, optional
+            DPI value for saving PNG figure. Default: 100.
+        z_min : float, optional
+            Minimum log10(Mass) value used to show the stellar mass map. Default: 3.5
+        z_max : float, optional
+            Maximum log10(Mass) value used to show the stellar mass map. Default: 10.5
+        r_min : float, optional
+            Minimum radius to plot, in unit of kpc. Default: 3.0.
+        r_max : float, optional
+            Maximum radius to plot, in unit of kpc. Default: 190.
+        combine : bool, optional
+            Combine the two figures horizontally. Require `imagemagick`. Default: False.
+
+        """
+        # Make sure the Ellipse results are available
+        if self.ell_sum is None:
+            self.ell_summary()
+
+        # Maximum radii to plot
+        if r_max is None:
+            r_max = self.info['pix'] * self.info['img_w'] / 2.0 * 1.2
+
+        # Prepare the data used for making plots
+        ell_plot = visual.prepare_show_ellipse(self.info, self.maps, self.ell_sum)
+
+        # Making the overplot figure
+        over_fig = visual.overplot_ellipse(ell_plot, zmin=z_min, zmax=z_max)
+
+        # Making the 1-D profile figure
+        prof_fig = visual.plot_ell_prof(ell_plot, r_min=r_min, r_max=r_max)
+
+        # Save the figure in PNG format if necessary
+        if savefig:
+            over_file = os.path.join(self.fig_dir, "{}_over.png".format(self.prefix))
+            prof_file = os.path.join(self.fig_dir, "{}_prof.png".format(self.prefix))
+            over_fig.savefig(over_file, dpi=dpi)
+            prof_fig.savefig(prof_file, dpi=dpi)
+            plt.close(over_fig)
+            plt.close(prof_fig)
+
+            # Combine these two figures into one
+            if combine:
+                # This requires `imagemagick` is installed and `montage` command is available.
+                montage = shutil.which('montage')
+                if montage is None:
+                    print("# Imagemagick is not available...")
+                    return
+
+                # Name of the combined figure
+                ellip_file = os.path.join(self.fig_dir, "{}_ellp.png".format(self.prefix))
+
+                # `montage` command
+                cmd = "{} -mode concatenate -tile 2x1 -geometry +5 ".format(montage) + \
+                    "{} {} {}".format(over_file, prof_file, ellip_file)
+                os.system(cmd)
+
+                if os.path.isfile(ellip_file):
+                    os.remove(over_file)
+                    os.remove(prof_file)
+                else:
+                    print("# Something went wrong with the command: {}".format(cmd))
+                    return
+        else:
+            return over_fig, prof_fig
