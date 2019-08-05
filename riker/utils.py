@@ -4,14 +4,31 @@
 
 import os
 import glob
+import pickle
 
 from astropy.io import fits
 
 __all__ = [
+    'read_from_pickle',
+    'save_to_pickle',
     'save_to_fits',
     'linux_or_mac',
     'clean_after_ellipse',
 ]
+
+
+def read_from_pickle(name):
+    """Read the data from Pickle file."""
+    return pickle.load(open(name, "rb"))
+
+
+def save_to_pickle(obj, name):
+    """Save an object to a cPickle/Pickle format binary file."""
+    output = open(name, 'wb')
+    pickle.dump(obj, output, protocol=2)
+    output.close()
+
+    return
 
 
 def save_to_fits(data, fits_file, wcs=None, header=None, overwrite=True):

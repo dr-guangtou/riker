@@ -145,7 +145,6 @@ class GalaxyMap(object):
         self.aper_sum = None
         self.ell_sum = None
 
-
     def radial_bins(self, rad=None, output=False):
         """Design radial bins to get aperture profiles.
 
@@ -619,8 +618,8 @@ class GalaxyMap(object):
         else:
             return aper_fig
 
-    def show_ell(self, savefig=False, dpi=100, z_min=3.5, z_max=10.5,
-                 r_min=3.0, r_max=None, combine=False):
+    def show_prof(self, savefig=False, dpi=100, z_min=3.5, z_max=10.5,
+                  r_min=3.0, r_max=None, combine=False):
         """Visualize the 1-D Ellipse profiles of all components.
 
         Parameters
@@ -693,3 +692,43 @@ class GalaxyMap(object):
                     return
         else:
             return over_fig, prof_fig
+
+    def run_all(self, plot=False, output=False, save=True):
+        """Run all the default analysis of a galaxy (and make plots).
+
+        Parameters
+        ----------
+        plot : bool, optional
+            Make some visualizations and save as PNG figures. Default: False.
+        save : bool, optional
+            Save the summary dict as a `.npy` file. Default: True
+        output : bool, optional
+            Also return the summary dict. Default: False
+
+        """
+        # Make sure the aperture profiles results are available
+        if self.aper_sum is None:
+            self.aper_summary(gal_only=False)
+
+        # Make sure the Ellipse results are available
+        if self.ell_sum is None:
+            self.ell_summary(gal_only=False)
+
+        # Make a summary data structure
+        summary = {
+            'info': self.info, 'geom': self.detect_gal,
+            'aper': self.aper_sum, 'prof': self.ell_sum
+        }
+
+        # Visualize the results
+        if plot:
+            _ = self.show_maps(savefig=True)
+            _ = self.show_aper(savefig=True)
+            _ = self.show_prof(savefig=True, combine=True)
+
+        if save:
+            sum_file = os.path.join(self.sum_dir, "{}_sum.npy".format(self.prefix))
+            utils.save_to_pickle(summary, sum_file)
+
+        if output:
+            return summary
