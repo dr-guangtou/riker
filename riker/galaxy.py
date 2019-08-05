@@ -6,10 +6,13 @@ import os
 
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 from astropy.table import Table, Column, join
 
 from riker import utils
 from riker import config
+from riker import visual
 from riker import profile
 
 
@@ -60,8 +63,16 @@ class GalaxyMap(object):
         # Parent directory to keep the files
         self.dir = hdf5.dir
 
-        # Prefix for output files
-        self.prefix = hdf5.label
+        # Other directories for saving output files
+        self.fits_dir = os.path.join(self.dir, 'fits')
+        self.fig_dir = os.path.join(self.dir, 'fig')
+        self.sum_dir = os.path.join(self.dir, 'sum')
+        if not os.path.isdir(self.fits_dir):
+            os.mkdir(self.fits_dir)
+        if not os.path.isdir(self.fig_dir):
+            os.mkdir(self.fig_dir)
+        if not os.path.isdir(self.sum_dir):
+            os.mkdir(self.sum_dir)
 
         # Pixel scale in unit of kpc per pixel
         self.pix = hdf5.pix
@@ -80,6 +91,10 @@ class GalaxyMap(object):
 
         # Gather all the maps and the basic information
         self.info, self.maps = hdf5.get_maps(self.idx, self.proj)
+
+        # Prefix for output files
+        self.prefix = "{}_{}_{}_{}".format(
+            hdf5.label, self.idx, self.info['catsh_id'], self.proj)
 
         # Design the radial bins
         self.rad_bins = rad
@@ -254,7 +269,10 @@ class GalaxyMap(object):
 
         # If not basic information is available, run the detection again.
         if detect is None:
-            detect = self.detect(map_type, output=True, **detect_kwargs)
+            if self.config.using_gal:
+                detect = self.detect('gal', output=True, **detect_kwargs)
+            else:
+                detect = self.detect(map_type, output=True, **detect_kwargs)
 
         # Here we have 1 configuration parameter:
         # subpix
@@ -271,7 +289,8 @@ class GalaxyMap(object):
         if output:
             return maper
 
-    def aprof(self, data_type, map_type, output=False, verbose=False, **detect_kwargs):
+    def aprof(self, data_type, map_type, output=False, verbose=False, return_mass=False,
+              **detect_kwargs):
         """Get the average profiles of a property using pre-defined apertures.
 
         Parameters
@@ -284,6 +303,8 @@ class GalaxyMap(object):
             Blah, Blah, Blah. Default: False
         output : bool, optional
             Return the `maper` array when True. Default: False
+        return_mass : bool, optional
+            Return the stellar mass in each radial bins. Default: False
 
         Configuration Parameters
         ------------------------
@@ -301,13 +322,17 @@ class GalaxyMap(object):
 
         # If not basic information is available, run the detection again.
         if detect is None:
-            detect = self.detect(
-                self.maps['mass_{}'.format(map_type)], output=True, **detect_kwargs)
+            if self.config.using_gal:
+                detect = self.detect('gal', output=True, **detect_kwargs)
+            else:
+                detect = self.detect(map_type, output=True, **detect_kwargs)
+
+        mask = (self.maps['mass_gal'] < 1.).astype(np.uint8)
 
         prof = profile.mass_weighted_prof(
             self.maps['{}_{}'.format(data_type, map_type)],
             self.maps['mass_{}'.format(map_type)], detect, self.rad_inn, self.rad_out,
-            subpix=self.config.subpix)
+            subpix=self.config.subpix, return_mass=return_mass, mask=mask)
 
         if verbose:
             print("# {} profile for {}".format(data_type, map_type))
@@ -336,22 +361,22 @@ class GalaxyMap(object):
 
         """
         # Aperture mass profiles
-        self.maper('gal', subpix=self.config.subpix, using_gal=self.config.using_gal)
+        self.maper('gal')
         if not gal_only:
-            self.maper('ins', subpix=self.config.subpix, using_gal=self.config.using_gal)
-            self.maper('exs', subpix=self.config.subpix, using_gal=self.config.using_gal)
+            self.maper('ins')
+            self.maper('exs')
 
         # Aperture age profiles
-        self.aprof('age', 'gal', subpix=self.config.subpix, using_gal=self.config.using_gal)
+        self.aprof('age', 'gal', return_mass=True)
         if not gal_only:
-            self.aprof('age', 'ins', subpix=self.config.subpix, using_gal=self.config.using_gal)
-            self.aprof('age', 'exs', subpix=self.config.subpix, using_gal=self.config.using_gal)
+            self.aprof('age', 'ins', return_mass=True)
+            self.aprof('age', 'exs', return_mass=True)
 
         # Aperture metallicity profiles
-        self.aprof('met', 'gal', subpix=self.config.subpix, using_gal=self.config.using_gal)
+        self.aprof('met', 'gal')
         if not gal_only:
-            self.aprof('met', 'ins', subpix=self.config.subpix, using_gal=self.config.using_gal)
-            self.aprof('met', 'exs', subpix=self.config.subpix, using_gal=self.config.using_gal)
+            self.aprof('met', 'ins')
+            self.aprof('met', 'exs')
 
         # Gather these results into an Astropy Table
         aper_sum = Table()
@@ -367,13 +392,16 @@ class GalaxyMap(object):
         aper_sum.add_column(Column(data=self.age_prof_gal['prof_w'], name='age_gal_w'))
         aper_sum.add_column(Column(data=self.age_prof_gal['prof'], name='age_gal'))
         aper_sum.add_column(Column(data=self.age_prof_gal['flag'], name='age_gal_flag'))
+        aper_sum.add_column(Column(data=self.age_prof_gal['mass'], name='mprof_gal'))
         if not gal_only:
             aper_sum.add_column(Column(data=self.age_prof_ins['prof_w'], name='age_ins_w'))
             aper_sum.add_column(Column(data=self.age_prof_ins['prof'], name='age_ins'))
             aper_sum.add_column(Column(data=self.age_prof_ins['flag'], name='age_ins_flag'))
+            aper_sum.add_column(Column(data=self.age_prof_ins['mass'], name='mprof_ins'))
             aper_sum.add_column(Column(data=self.age_prof_exs['prof_w'], name='age_exs_w'))
             aper_sum.add_column(Column(data=self.age_prof_exs['prof'], name='age_exs'))
             aper_sum.add_column(Column(data=self.age_prof_exs['flag'], name='age_exs_flag'))
+            aper_sum.add_column(Column(data=self.age_prof_exs['mass'], name='mprof_exs'))
         aper_sum.add_column(Column(data=self.met_prof_gal['prof_w'], name='met_gal_w'))
         aper_sum.add_column(Column(data=self.met_prof_gal['prof'], name='met_gal'))
         aper_sum.add_column(Column(data=self.met_prof_gal['flag'], name='met_gal_flag'))
@@ -406,13 +434,11 @@ class GalaxyMap(object):
         """
         # Output folder for the FITS file
         if folder is None:
-            folder = self.dir
+            folder = self.fits_dir
 
         # Name of the output file
         fits_name = os.path.join(
-            folder, "{}_{}_{}_{}_{}_{}.fits".format(
-                self.prefix, self.idx, self.info['catsh_id'],
-                self.proj, data_type, map_type))
+            folder, "{}_{}_{}.fits".format(self.prefix, data_type, map_type))
 
         utils.save_to_fits(self.maps['{}_{}'.format(data_type, map_type)], fits_name)
         if not os.path.isfile(fits_name):
@@ -446,7 +472,7 @@ class GalaxyMap(object):
             'ins_shape': self.ell_shape_ins, 'ins_mprof': self.ell_mprof_ins,
             'exs_shape': self.ell_shape_exs, 'exs_mprof': self.ell_mprof_exs,
         }
-        
+
         setattr(self, 'ell_sum', ell_sum)
 
         if output:
@@ -516,7 +542,34 @@ class GalaxyMap(object):
         setattr(self, 'ell_shape_{}'.format(map_type), ell_shape_new.as_array())
         setattr(self, 'ell_mprof_{}'.format(map_type), ell_mprof_new.as_array())
         if map_type == 'gal':
-            setattr(self. 'bin_mprof_gal', bin_mprof)
+            setattr(self, 'bin_mprof_gal', bin_mprof)
 
         if output:
             return ell_shape_new, ell_mprof_new, bin_shape, bin_mprof
+
+    def show_maps(self, figsize=(15, 15), savefig=False, dpi=100):
+        """Visualize the stellar mass, age, and metallicity maps for all components.
+
+        Parameters
+        ----------
+        figsize : tuple, optional
+            Size of the 3x3 figure. Default: (15, 15)
+        savefig : bool, optional
+            Save a copy of the figure in PNG format. Default: False.
+        dpi : int, optional
+            DPI value for saving PNG figure. Default: 100.
+
+        """
+        if self.detect_gal is None:
+            self.detect('gal')
+
+        map_fig = visual.show_maps(
+            self.maps, self.detect_gal,
+            cid=self.info['catsh_id'], logms=self.info['logms'])
+
+        if savefig:
+            map_fig.savefig(
+                os.path.join(self.fig_dir, "{}_maps.png".format(self.prefix)), dpi=dpi)
+            plt.close(map_fig)
+        else:
+            return map_fig

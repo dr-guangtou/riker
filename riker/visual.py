@@ -36,8 +36,8 @@ rcParams.update({'axes.titlepad': '10.0'})
 rcParams.update({'font.size': 25})
 
 __all__ = [
-    'show_all_maps',
-    'show_all_prof',
+    'show_maps',
+    'show_aper',
     'prepare_show_ellipse',
     'overplot_ellipse',
     'plot_ell_prof',
@@ -49,11 +49,24 @@ IMG_CMAP = plt.get_cmap('Greys')
 IMG_CMAP.set_bad(color='w')
 
 
-def show_all_maps(summary, figsize=(15, 15)):
-    """Visualize all maps."""
-    maps, aper, cid = summary['maps'], summary['aper'], summary['catsh_id']
-    logms = summary['logms']
+def show_maps(maps, aper, cid=None, logms=None, figsize=(15, 15)):
+    """Visualize the stellar mass, age, and metallicity maps.
 
+    Parameters
+    ----------
+    maps : dict
+        Dictionary that contains all stellar mass, age, and metallicity maps.
+    aper : dict
+        Dictionary that contains basic shape information of the galaxy.
+    cid : int, optional
+        `catsh_id`, sub-halo ID in the simulation. Used to identify galaxy.
+        Default: None
+    logms : float, optional
+        Stellar mass in log10 unit. Default: None.
+    figsize : tuple, optional
+        Size of the 3x3 figure. Default: (15, 15)
+
+    """
     # Setup the figure and grid of axes
     fig_sum = plt.figure(figsize=figsize, constrained_layout=False)
     grid_sum = fig_sum.add_gridspec(3, 3, wspace=0.0, hspace=0.0)
@@ -62,9 +75,9 @@ def show_all_maps(summary, figsize=(15, 15)):
         wspace=0.00, hspace=0.00)
 
     # List of the maps need to be plot
-    list_maps = ['mass_cen', 'mass_ins', 'mass_exs',
-                 'age_cen', 'age_ins', 'age_exs',
-                 'met_cen', 'met_ins', 'met_exs']
+    list_maps = ['mass_gal', 'mass_ins', 'mass_exs',
+                 'age_gal', 'age_ins', 'age_exs',
+                 'met_gal', 'met_ins', 'met_exs']
 
     for ii, name in enumerate(list_maps):
         ax = fig_sum.add_subplot(grid_sum[ii])
@@ -99,7 +112,7 @@ def show_all_maps(summary, figsize=(15, 15)):
                 ax.text(0.75, 0.06, r'$\rm Total$', fontsize=25,
                         transform=ax.transAxes)
             # Put the ID
-            if ii == 1:
+            if ii == 1 and cid is not None and logms is not None:
                 ax.text(
                     0.5, 0.88, r'$\mathrm{ID}: %d\ \ \log M_{\star}: %5.2f$' % (cid, logms),
                     fontsize=25, transform=ax.transAxes, horizontalalignment='center',
@@ -143,11 +156,31 @@ def show_all_maps(summary, figsize=(15, 15)):
     return fig_sum
 
 
-def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
-    """Show all the 1-D profiles."""
-    logms, age = summary['logms'], summary['age']
-    logz = np.log10(summary['metallicity'] / Z_SUN)
-    rad_mask = summary['profs']['rad_bins'] >= rad_min
+def show_aper(info, aper, figsize=(8, 18), rad_min=5.5, rad_max=170.):
+    """Make a summary plot of the aperture measurements.
+
+    Parameters
+    ----------
+    info : dict
+        A dictionary that contains basic information of the galaxy
+    aper : dict
+        A dictionary that contains the aperture measurements of stellar mass, age,
+        and metallicity.
+    rad_min : float, optional
+        Minimum radius to plot, in unit of kpc. Default: 5.5.
+    rad_max : float, optional
+        Maximum radius to plot, in unit of kpc. Default: 170.
+    figsize : tuple, optional
+        Size of the 3x3 figure. Default: (15, 15)
+
+    """
+    # Integrated properties of the galaxy
+    logms, age = info['logms'], info['age']
+    logz = np.log10(info['metallicity'] / Z_SUN)
+
+    # Radial mask
+    rad_mask = aper['rad_mid'] >= rad_min
+
     # Setup the figure
     fig_prof = plt.figure(figsize=figsize, constrained_layout=False)
     grid_prof = fig_prof.add_gridspec(4, 1, wspace=0.0, hspace=0.0)
@@ -158,13 +191,13 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     # Integrated mass profile
     ax0 = fig_prof.add_subplot(grid_prof[0])
     ax0.scatter(
-        summary['aper']['rad'] ** 0.25, summary['aper']['maper_cen'],
+        aper['rad_mid'] ** 0.25, np.log10(aper['maper_gal']),
         c='darkgrey', marker='s', s=60, label=r'$\rm Total$')
     ax0.scatter(
-        summary['aper']['rad'] ** 0.25, summary['aper']['maper_ins'],
+        aper['rad_mid'] ** 0.25, np.log10(aper['maper_ins']),
         c='orangered', marker='o', alpha=0.8, s=70, label=r'$\rm In\ situ$')
     ax0.scatter(
-        summary['aper']['rad'] ** 0.25, summary['aper']['maper_exs'],
+        aper['rad_mid'] ** 0.25, np.log10(aper['maper_exs']),
         c='steelblue', marker='h', alpha=0.8, s=80, label=r'$\rm Ex\ situ$')
     ax0.axhline(logms, linewidth=2.5, linestyle='--', alpha=0.8, c='k',
                 label='__no_label__')
@@ -175,19 +208,20 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     _ = ax0.set_xlim(rad_min ** 0.25, rad_max ** 0.25)
 
     mass_arr = np.stack(
-        [summary['aper']['maper_cen'][summary['aper']['rad'] > rad_min],
-         summary['aper']['maper_ins'][summary['aper']['rad'] > rad_min],
-         summary['aper']['maper_exs'][summary['aper']['rad'] > rad_min]])
+        [np.log10(aper['maper_gal'][rad_mask]),
+         np.log10(aper['maper_ins'][rad_mask]),
+         np.log10(aper['maper_exs'][rad_mask])])
+
     _ = ax0.set_ylim(np.nanmin(mass_arr) - 0.09, logms + 0.15)
     _ = ax0.set_ylabel(r'$\rm Curve\ of\ Growth$', fontsize=28)
 
     # Radial mass bin profile
     ax1 = fig_prof.add_subplot(grid_prof[1])
     ax1.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['mass_ins_bins'],
+        aper['rad_mid'] ** 0.25, np.log10(aper['mprof_ins']),
         c='orangered', marker='o', alpha=0.8, s=70, label=r'$\rm In\ situ$')
     ax1.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['mass_exs_bins'],
+        aper['rad_mid'] ** 0.25, np.log10(aper['mprof_exs']),
         c='steelblue', marker='h', alpha=0.8, s=80, label=r'$\rm Ex\ situ$')
 
     ax1.grid(linestyle='--', alpha=0.5)
@@ -195,15 +229,12 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     _ = ax1.set_xlim(rad_min ** 0.25, rad_max ** 0.25)
 
     mbins_arr = np.stack(
-        [summary['profs']['mass_ins_bins'][summary['profs']['rad_bins'] > rad_min],
-         summary['profs']['mass_exs_bins'][summary['profs']['rad_bins'] > rad_min]])
+        [np.log10(aper['mprof_ins'][rad_mask]), np.log10(aper['mprof_exs'][rad_mask])])
     _ = ax1.set_ylim(np.nanmin(mbins_arr) * 0.95, np.nanmax(mbins_arr) * 1.05)
     _ = ax1.set_ylabel(r'$\log [M_{\star}/M_{\odot}]$', fontsize=28)
 
     # Ex-situ fraction
-    fexs = (10.0 ** summary['profs']['mass_exs_bins'] / (
-        10.0 ** summary['profs']['mass_ins_bins'] +
-        10.0 ** summary['profs']['mass_exs_bins']))
+    fexs = aper['mprof_exs'] / (aper['mprof_ins'] + aper['mprof_exs'])
 
     ax1_b = fig_prof.add_axes(ax1.get_position())
     ax1_b.patch.set_visible(False)
@@ -212,7 +243,7 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     ax1_b.tick_params(axis='y', colors='maroon')
     ax1_b.yaxis.set_label_position('right')
     ax1_b.yaxis.set_ticks_position('right')
-    ax1_b.plot(summary['profs']['rad_bins'], fexs, linestyle='--', c='maroon',
+    ax1_b.plot(aper['rad_mid'] ** 0.25, fexs, linestyle='--', c='maroon',
                linewidth=3.5, alpha=0.8, label=r'$\rm Ex\ situ\ fraction$')
     ax1_b.set_ylim(0.02, 0.98)
     ax1_b.legend(fontsize=22, loc='best')
@@ -220,27 +251,22 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
     # Metallicity profiles
     ax2 = fig_prof.add_subplot(grid_prof[2])
     ax2.scatter(
-        summary['profs']['rad_bins'] ** 0.25,
-        np.log10(summary['profs']['met_cen_bins'] / Z_SUN), c='darkgrey', marker='s',
-        s=60, label='__no_label__')
+        aper['rad_mid'] ** 0.25, np.log10(aper['met_gal_w'] / Z_SUN),
+        c='darkgrey', marker='s', s=60, label='__no_label__')
     ax2.scatter(
-        summary['profs']['rad_bins'] ** 0.25,
-        np.log10(summary['profs']['met_w_ins_bins'] / Z_SUN), c='orangered', marker='o',
-        s=70, alpha=0.8, label='__no_label__')
+        aper['rad_mid'] ** 0.25, np.log10(aper['met_ins_w'] / Z_SUN),
+        c='orangered', marker='o', s=70, alpha=0.8, label='__no_label__')
     ax2.scatter(
-        summary['profs']['rad_bins'] ** 0.25,
-        np.log10(summary['profs']['met_w_exs_bins'] / Z_SUN), c='steelblue', marker='h',
-        s=80, alpha=0.8, label='__no_label__')
+        aper['rad_mid'] ** 0.25, np.log10(aper['met_exs_w'] / Z_SUN),
+        c='steelblue', marker='h', s=80, alpha=0.8, label='__no_label__')
     ax2.scatter(
-        summary['profs']['rad_bins'] ** 0.25,
-        np.log10(summary['profs']['met_ins_bins'] / Z_SUN), edgecolor='orangered',
-        marker='o', s=80, alpha=0.8, label='__no_label__', facecolor='none',
-        linewidth=2)
+        aper['rad_mid'] ** 0.25, np.log10(aper['met_ins'] / Z_SUN),
+        edgecolor='orangered', marker='o', s=80, alpha=0.8, label='__no_label__',
+        facecolor='none', linewidth=2)
     ax2.scatter(
-        summary['profs']['rad_bins'] ** 0.25,
-        np.log10(summary['profs']['met_exs_bins'] / Z_SUN), edgecolor='steelblue',
-        marker='h', s=90, alpha=0.8, label='__no_label__', facecolor='none',
-        linewidth=2)
+        aper['rad_mid'] ** 0.25, np.log10(aper['met_exs'] / Z_SUN),
+        edgecolor='steelblue', marker='h', s=90, alpha=0.8, label='__no_label__',
+        facecolor='none', linewidth=2)
     ax2.axhline(logz, linewidth=2.5, linestyle='--', alpha=0.8, c='k',
                 label=r'$\rm Catalog\ value$')
 
@@ -249,29 +275,29 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
 
     _ = ax2.set_xlim(rad_min ** 0.25, rad_max ** 0.25)
     met_arr = np.stack(
-        [np.log10(summary['profs']['met_w_ins_bins'][rad_mask] / Z_SUN),
-         np.log10(summary['profs']['met_w_exs_bins'][rad_mask] / Z_SUN)])
+        [np.log10(aper['met_ins_w'][rad_mask] / Z_SUN),
+         np.log10(aper['met_exs_w'][rad_mask] / Z_SUN)])
     _ = ax2.set_ylim(np.nanmin(met_arr) - 0.15, np.nanmax(met_arr) + 0.09)
     _ = ax2.set_ylabel(r'$\log [Z_{\star}/Z_{\odot}]$', fontsize=28)
 
     # Age profiles
     ax3 = fig_prof.add_subplot(grid_prof[3])
     ax3.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['age_cen_bins'],
-        c='darkgrey', marker='s', label=r'__no_label__', s=60)
+        aper['rad_mid'] ** 0.25, aper['age_gal_w'],
+        c='darkgrey', marker='s', s=60, label='__no_label__')
     ax3.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['age_w_ins_bins'],
-        c='orangered', marker='o', label=r'$\rm Mass\ weighted$', s=70, alpha=0.8)
+        aper['rad_mid'] ** 0.25, aper['age_ins_w'],
+        c='orangered', marker='o', s=70, alpha=0.8, label=r'$\rm Weighted$')
     ax3.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['age_w_exs_bins'],
-        c='steelblue', marker='h', label=r'__no_label__', s=80, alpha=0.8)
+        aper['rad_mid'] ** 0.25, aper['age_exs_w'],
+        c='steelblue', marker='h', s=80, alpha=0.8, label='__no_label__')
     ax3.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['age_ins_bins'],
-        edgecolor='orangered', marker='o', label=r'$\rm Average$', s=80,
-        alpha=0.8, facecolor='none', linewidth=2)
+        aper['rad_mid'] ** 0.25, aper['age_ins'],
+        edgecolor='orangered', marker='o', s=80, alpha=0.8, label=r'$\rm Not\ Weighted$',
+        facecolor='none', linewidth=2)
     ax3.scatter(
-        summary['profs']['rad_bins'] ** 0.25, summary['profs']['age_exs_bins'],
-        edgecolor='steelblue', marker='h', label=r'__no_label__', s=90, alpha=0.8,
+        aper['rad_mid'] ** 0.25, aper['age_exs'],
+        edgecolor='steelblue', marker='h', s=90, alpha=0.8, label='__no_label__',
         facecolor='none', linewidth=2)
     ax3.axhline(age, linewidth=2.5, linestyle='--', alpha=0.8, c='k',
                 label=r'__no_label__')
@@ -281,8 +307,7 @@ def show_all_prof(summary, figsize=(8, 18), rad_min=5.5, rad_max=170.):
 
     _ = ax3.set_xlim(rad_min ** 0.25, rad_max ** 0.25)
     age_arr = np.stack(
-        [summary['profs']['age_w_ins_bins'][rad_mask],
-         summary['profs']['age_w_exs_bins'][rad_mask]])
+        [aper['age_ins_w'][rad_mask], aper['age_exs_w'][rad_mask]])
     _ = ax3.set_ylim(np.nanmin(age_arr) * 0.8, np.nanmax(age_arr) + 1.5)
 
     _ = ax3.set_xlabel(r'$[R/{\rm kpc}]^{1/4}$', fontsize=28)
@@ -295,11 +320,11 @@ def prepare_show_ellipse(summary, ellip):
     """Prepare the data for visualizing the 1-D profiles."""
     return {'catsh_id': summary['catsh_id'],
             'logms': summary['logms'],
-            'mass_cen': summary['maps']['mass_cen'],
+            'mass_gal': summary['maps']['mass_gal'],
             'mass_ins': summary['maps']['mass_ins'],
             'mass_exs': summary['maps']['mass_exs'],
-            'ell_cen_2': ellip['ell_cen_2'],
-            'ell_cen_3': ellip['ell_cen_3'],
+            'ell_gal_2': ellip['ell_gal_2'],
+            'ell_gal_3': ellip['ell_gal_3'],
             'ell_ins_2': ellip['ell_ins_2'],
             'ell_ins_3': ellip['ell_ins_3'],
             'ell_exs_2': ellip['ell_exs_2'],
@@ -324,12 +349,12 @@ def overplot_ellipse(ell_plot, pix=1.0, zmin=3.5, zmax=10.5):
     ax1.yaxis.set_major_formatter(NullFormatter())
     ax1.xaxis.set_major_formatter(NullFormatter())
     ax1 = display_single(
-        ell_plot['mass_cen'], ax=ax1, stretch='log10', zmin=zmin, zmax=zmax,
+        ell_plot['mass_gal'], ax=ax1, stretch='log10', zmin=zmin, zmax=zmax,
         cmap=IMG_CMAP, no_negative=True, color_bar=True, scale_bar=False,
         color_bar_color='k')
 
-    if ell_plot['ell_cen_2'] is not None:
-        for k, iso in enumerate(ell_plot['ell_cen_2']):
+    if ell_plot['ell_gal_2'] is not None:
+        for k, iso in enumerate(ell_plot['ell_gal_2']):
             if k % 3 == 0 and iso['sma'] >= 6.0:
                 e = Ellipse(xy=(iso['x0'], iso['y0']), height=iso['sma'] * 2.0,
                             width=iso['sma'] * 2.0 * (1.0 - iso['ell']),
@@ -350,7 +375,7 @@ def overplot_ellipse(ell_plot, pix=1.0, zmin=3.5, zmax=10.5):
     ax2.yaxis.set_major_formatter(NullFormatter())
     ax2.xaxis.set_major_formatter(NullFormatter())
     ax2 = display_single(
-        ell_plot['mass_cen'], ax=ax2, stretch='log10', zmin=zmin, zmax=zmax,
+        ell_plot['mass_gal'], ax=ax2, stretch='log10', zmin=zmin, zmax=zmax,
         cmap=IMG_CMAP, no_negative=True, color_bar=False, scale_bar=True,
         pixel_scale=1., physical_scale=pix, scale_bar_loc='right',
         scale_bar_length=50., scale_bar_color='k', scale_bar_y_offset=1.3)
@@ -455,11 +480,11 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
     # 1-D profile
     ax1.grid(linestyle='--', alpha=0.4, linewidth=2)
 
-    if ell_plot['ell_cen_3'] is not None:
+    if ell_plot['ell_gal_3'] is not None:
         ax1.errorbar(
-            (ell_plot['ell_cen_3']['sma'] * pix) ** 0.25,
-            np.log10(ell_plot['ell_cen_3']['intens']),
-            yerr=ell_plot['ell_cen_3']['sbp_err'], markersize=8,
+            (ell_plot['ell_gal_3']['sma'] * pix) ** 0.25,
+            np.log10(ell_plot['ell_gal_3']['intens']),
+            yerr=ell_plot['ell_gal_3']['sbp_err'], markersize=8,
             color='darkgrey', alpha=0.8, fmt='s', capsize=3,
             capthick=1, elinewidth=1, label=r'$\mathrm{Total}$')
 
@@ -481,12 +506,12 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
 
     ax1.legend(loc='best', fontsize=23)
 
-    if (ell_plot['ell_cen_3'] is not None and ell_plot['ell_ins_3'] is not None and
+    if (ell_plot['ell_gal_3'] is not None and ell_plot['ell_ins_3'] is not None and
             ell_plot['ell_exs_3'] is not None):
         mass_arr = (
             list(ell_plot['ell_exs_3']['intens'][ell_plot['ell_exs_3']['sma'] * pix > r_min]) +
             list(ell_plot['ell_ins_3']['intens'][ell_plot['ell_ins_3']['sma'] * pix > r_min]) +
-            list(ell_plot['ell_cen_3']['intens'][ell_plot['ell_cen_3']['sma'] * pix > r_min]))
+            list(ell_plot['ell_gal_3']['intens'][ell_plot['ell_gal_3']['sma'] * pix > r_min]))
         min_mass = np.nanmin(mass_arr)
         if min_mass > 100.0:
             ax1.set_ylim(np.log10(min_mass) - 0.3, np.log10(np.nanmax(mass_arr)) + 0.5)
@@ -501,14 +526,14 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
     # Ellipticity profile
     ax2.grid(linestyle='--', alpha=0.4, linewidth=2)
 
-    if ell_plot['ell_cen_3'] is not None:
-        ax2.axhline(ell_plot['ell_cen_3']['ell'][1], c='k', linestyle='--',
+    if ell_plot['ell_gal_3'] is not None:
+        ax2.axhline(ell_plot['ell_gal_3']['ell'][1], c='k', linestyle='--',
                     linewidth=3, alpha=0.5)
 
-    if ell_plot['ell_cen_2'] is not None:
+    if ell_plot['ell_gal_2'] is not None:
         ax2.errorbar(
-            (ell_plot['ell_cen_2']['sma'] * pix) ** 0.25, ell_plot['ell_cen_2']['ell'],
-            yerr=ell_plot['ell_cen_2']['ell_err'], color='darkgrey', alpha=0.7, fmt='s',
+            (ell_plot['ell_gal_2']['sma'] * pix) ** 0.25, ell_plot['ell_gal_2']['ell'],
+            yerr=ell_plot['ell_gal_2']['ell_err'], color='darkgrey', alpha=0.7, fmt='s',
             capsize=3, capthick=1, elinewidth=2, markersize=8)
 
     if ell_plot['ell_ins_2'] is not None:
@@ -536,14 +561,14 @@ def plot_ell_prof(ell_plot, pix=1.0, r_min=3.0, r_max=190.0):
     # Position Angle profile
     ax3.grid(linestyle='--', alpha=0.4, linewidth=2)
 
-    if ell_plot['ell_cen_3'] is not None:
-        ax3.axhline(ell_plot['ell_cen_3']['pa'][1], c='k', linestyle='--',
+    if ell_plot['ell_gal_3'] is not None:
+        ax3.axhline(ell_plot['ell_gal_3']['pa'][1], c='k', linestyle='--',
                     linewidth=3, alpha=0.5)
 
-    if ell_plot['ell_cen_2'] is not None:
+    if ell_plot['ell_gal_2'] is not None:
         ax3.errorbar(
-            (ell_plot['ell_cen_2']['sma'] * pix) ** 0.25, ell_plot['ell_cen_2']['pa'],
-            yerr=ell_plot['ell_cen_2']['pa_err'], color='darkgrey', alpha=0.7, fmt='s',
+            (ell_plot['ell_gal_2']['sma'] * pix) ** 0.25, ell_plot['ell_gal_2']['pa'],
+            yerr=ell_plot['ell_gal_2']['pa_err'], color='darkgrey', alpha=0.7, fmt='s',
             capsize=3, capthick=1, elinewidth=2, markersize=8)
 
     if ell_plot['ell_ins_2'] is not None:

@@ -150,7 +150,8 @@ def aperture_masses(info, mass_map, detect=None, rad=None, n_rad=15, linear=Fals
     return rad, maper
 
 
-def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7, mask=None):
+def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7, 
+                       mask=None, return_mass=False):
     """Get the stellar mass weighted properties in annulus.
 
     Parameters
@@ -169,6 +170,8 @@ def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7, mask=None):
         Subpixel sampling factor. Default: 5.
     mask : ndarray, optional
         Mask array.
+    return_mass : bool, optional
+        Return the stellar mass in each radial bins. Default: False
 
     Returns
     -------
@@ -203,6 +206,12 @@ def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7, mask=None):
     sum_mass_map, _, _ = sep.sum_ellipann(
         mass_map, aper['x'], aper['y'], 1.0, aper['ba'],
         aper['theta'], r_inn, r_out, mask=mask, subpix=subpix)
+
+    if return_mass:
+        return {'prof_w': sum_data_w / sum_mass_map,
+                'prof': sum_data / n_pix_eff, 
+                'mass': sum_mass_map,
+                'flag': flag}
 
     return {'prof_w': sum_data_w / sum_mass_map,
             'prof': sum_data / n_pix_eff, 'flag': flag}
@@ -437,7 +446,7 @@ def ell_force(fits_name, in_ellip, aper, isophote=ISO, xttools=TBL, pix=1.0,
             verbose=False, savePng=False, saveOut=True, expTime=1.0,
             pix=pix, zpPhoto=0.0, stage=4, isophote=isophote, xttools=xttools,
             uppClip=3.0, lowClip=3.0, maxTry=2, nClip=2, intMode=mode,
-            updateIntens=False)
+            updateIntens=False, harmonics=True)
         # Add an index array
         ell_force.add_column(Column(data=np.arange(len(ell_force)), name='index'))
     except Exception:

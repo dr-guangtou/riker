@@ -17,7 +17,7 @@ DEFAULT_MAP_CONFIG = {
         'threshold': 1e8, 'bkg_ratio': 10, 'bkg_filter': 5,
     },
     'aper': {
-        'using_gal': True, 'subpix': 5,
+        'using_gal': True, 'subpix': 7,
     },
     'ellip': {
         'ini_sma': 15.0, 'max_sma': 175.0, 'step': 0.2, 'mode': 'mean',
