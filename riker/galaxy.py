@@ -4,6 +4,7 @@
 
 import os
 import shutil
+import warnings
 
 import numpy as np
 
@@ -16,6 +17,7 @@ from riker import config
 from riker import visual
 from riker import profile
 
+warnings.filterwarnings("ignore")
 
 __all__ = [
     'GalaxyMap',

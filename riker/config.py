@@ -11,7 +11,7 @@ __all__ = [
 DEFAULT_MAP_CONFIG = {
     # About radial bins
     'rad': {
-        'n_rad': 15, 'r_min': 0.1, 'r_max': None, 'linear': False,
+        'n_rad': 18, 'r_min': 0.5, 'r_max': None, 'linear': False,
     },
     'detect': {
         'threshold': 1e8, 'bkg_ratio': 10, 'bkg_filter': 5,
