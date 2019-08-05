@@ -542,20 +542,28 @@ class GalaxyMap(object):
         utils.clean_after_ellipse(
             folder, file_name.replace('.fits', ''), remove_bin=remove_bin)
 
-        # Calculate the Fourier amplitude information
-        fourier_shape = profile.fourier_profile(ell_shape, pix=self.info['pix'])
-        fourier_mprof = profile.fourier_profile(ell_mprof, pix=self.info['pix'])
+        # Sometimes Ellipse failed all the way...make sure it is dealt gracefully
+        if ell_shape is None:
+            print("# Ellipse fails to get shape for {} of {}".format(map_type, self.info['catsh_id']))
+        else:
+            # Calculate the Fourier amplitude information
+            fourier_shape = profile.fourier_profile(ell_shape, pix=self.info['pix'])
+            # Join the useful columns from the Ellipse output with the Fourier amplitudes.
+            ell_shape_new = join(
+                ell_shape[ELL_COL_USE], fourier_shape, keys='index', join_type='inner')
+            setattr(self, 'ell_shape_{}'.format(map_type), ell_shape_new.as_array())
 
-        # Join the useful columns from the Ellipse output with the Fourier amplitudes.
-        ell_shape_new = join(
-            ell_shape[ELL_COL_USE], fourier_shape, keys='index', join_type='inner')
-        ell_mprof_new = join(
-            ell_mprof[ELL_COL_USE], fourier_mprof, keys='index', join_type='inner')
-
-        setattr(self, 'ell_shape_{}'.format(map_type), ell_shape_new.as_array())
-        setattr(self, 'ell_mprof_{}'.format(map_type), ell_mprof_new.as_array())
-        if map_type == 'gal':
-            setattr(self, 'bin_mprof_gal', bin_mprof)
+        if ell_mprof is None:
+            print("# Ellipse fails to get profile for {} of {}".format(map_type, self.info['catsh_id']))
+        else:
+            # Calculate the Fourier amplitude information
+            fourier_mprof = profile.fourier_profile(ell_mprof, pix=self.info['pix'])
+            # Join the useful columns from the Ellipse output with the Fourier amplitudes.
+            ell_mprof_new = join(
+                ell_mprof[ELL_COL_USE], fourier_mprof, keys='index', join_type='inner')
+            setattr(self, 'ell_mprof_{}'.format(map_type), ell_mprof_new.as_array())
+            if map_type == 'gal':
+                setattr(self, 'bin_mprof_gal', bin_mprof)
 
         if output:
             return ell_shape_new, ell_mprof_new, bin_shape, bin_mprof

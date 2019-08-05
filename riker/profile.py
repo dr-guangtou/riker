@@ -150,7 +150,7 @@ def aperture_masses(info, mass_map, detect=None, rad=None, n_rad=15, linear=Fals
     return rad, maper
 
 
-def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7, 
+def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7,
                        mask=None, return_mass=False):
     """Get the stellar mass weighted properties in annulus.
 
@@ -209,7 +209,7 @@ def mass_weighted_prof(data, mass_map, aper, r_inn, r_out, subpix=7,
 
     if return_mass:
         return {'prof_w': sum_data_w / sum_mass_map,
-                'prof': sum_data / n_pix_eff, 
+                'prof': sum_data / n_pix_eff,
                 'mass': sum_mass_map,
                 'flag': flag}
 
@@ -393,7 +393,7 @@ def fourier_profile(ellip, r_min=0., r_max=None, pix=1.0):
     fourier_tab.add_column(Column(data=a4_err[sma_mask], name='a4_err'))
     fourier_tab.add_column(Column(data=b4_arr[sma_mask], name='b4'))
     fourier_tab.add_column(Column(data=b4_err[sma_mask], name='b4_err'))
-    try: 
+    try:
         fourier_tab.add_column(Column(data=ellip['index'][sma_mask], name='index'))
     except KeyError:
         pass
