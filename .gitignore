@@ -104,4 +104,5 @@ venv.bak/
 .mypy_cache/
 
 demo/*.fits
+demo/figure
 data/*.fits
