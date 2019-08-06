@@ -30,6 +30,10 @@ n_gal = ori_data.n_gal
 # Projection
 proj = 'xz'
 
+# Close the file
+ori_data.data.flush()
+ori_data.data.close()
+
 n_jobs = 1
 
 # Worker function
@@ -49,11 +53,8 @@ def reduce(idx, proj='xz'):
     hdf5_data = BeneMassAgeZMaps(hdf5_file, label=sim_label)
 
     # Deal with each galaxy
-    try:
-        gal = GalaxyMap(hdf5_data, idx, proj=proj, aper_force=None)
-        gal.run_all(plot=True, output=False)
-    except Exception:
-        print("\n# Fail to deal with galaxy: {} !!".format(idx))
+    gal = GalaxyMap(hdf5_data, idx, proj=proj, aper_force=None)
+    gal.run_all(plot=False, output=False)
 
     # Close the HDF5 file
     hdf5_data.data.close()

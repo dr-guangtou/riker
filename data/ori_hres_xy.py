@@ -6,6 +6,9 @@ import os
 
 import numpy as np
 
+import matplotlib
+matplotlib.use('TkAgg') 
+
 from functools import partial
 from multiprocessing import Pool
 
@@ -27,10 +30,14 @@ ori_data = BeneMassAgeZMaps(ori_file, label=ori_label)
 # Number of galaxies 
 n_gal = ori_data.n_gal
 
+# Close the file
+ori_data.data.flush()
+ori_data.data.close()
+
 # Projection
 proj = 'xy'
 
-n_jobs = 2
+n_jobs = 1
 
 # Worker function
 def reduce(idx, proj='xy'):
