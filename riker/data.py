@@ -7,6 +7,9 @@ import os
 import h5py
 import numpy as np
 
+from astropy.table import Table, Column
+
+
 __all__ = [
     'BeneMassAgeZMaps',
     'Z_SUN',
@@ -39,6 +42,8 @@ class BeneMassAgeZMaps(object):
 
         # Open and read in the file
         self.data = h5py.File(self.hdf5_file, 'r')
+        # TODO
+        #self.all = self.get_data(self.hdf5_file)
 
         # Keys for available data
         self.keys = list(self.data.keys())
@@ -74,6 +79,77 @@ class BeneMassAgeZMaps(object):
         else:
             print("# Key: {} is not available!".format(key))
             return None
+    
+    def get_data(self, hdf5_file):
+        """Extract all useful data from the HDF5 file.
+
+        Parameters
+        ----------
+        hdf5_file : str
+            Location of the HDF5 file of the map.
+
+        """
+        hdf5 = h5py.File(self.hdf5_file, 'r')
+        data = {
+            'catsh_id': list(hdf5['catsh_id']), 
+            'catgrp_is_primary': list(hdf5['catgrp_is_primary']), 
+            'scalar_star_mass': list(hdf5['scalar_star_mass']), 
+            'catgrp_Group_M_Crit200': list(hdf5['catgrp_Group_M_Crit200']), 
+            'scalar_star_age': list(hdf5['scalar_star_age']), 
+            'scalar_star_metallicity': list(hdf5['scalar_star_metallicity']), 
+            'map_star_rho_insitu_xy': list(hdf5['map_star_rho_insitu_xy']),
+            'map_star_rho_insitu_xz': list(hdf5['map_star_rho_insitu_xz']),
+            'map_star_rho_insitu_yz': list(hdf5['map_star_rho_insitu_yz']),
+            'map_star_rho_exsitu_xy': list(hdf5['map_star_rho_exsitu_xy']),
+            'map_star_rho_exsitu_xz': list(hdf5['map_star_rho_exsitu_xz']),
+            'map_star_rho_exsitu_yz': list(hdf5['map_star_rho_exsitu_yz']),
+            'map_star_age_insitu_xy': list(hdf5['map_star_age_insitu_xy']),
+            'map_star_age_insitu_xz': list(hdf5['map_star_age_insitu_xz']),
+            'map_star_age_insitu_yz': list(hdf5['map_star_age_insitu_yz']),
+            'map_star_age_exsitu_xy': list(hdf5['map_star_age_exsitu_xy']),
+            'map_star_age_exsitu_xz': list(hdf5['map_star_age_exsitu_xz']),
+            'map_star_age_exsitu_yz': list(hdf5['map_star_age_exsitu_yz']),
+            'map_star_metallicity_insitu_xy': list(hdf5['map_star_metallicity_insitu_xy']),
+            'map_star_metallicity_insitu_xz': list(hdf5['map_star_metallicity_insitu_xz']),
+            'map_star_metallicity_insitu_yz': list(hdf5['map_star_metallicity_insitu_yz']),
+            'map_star_metallicity_exsitu_xy': list(hdf5['map_star_metallicity_exsitu_xy']),
+            'map_star_metallicity_exsitu_xz': list(hdf5['map_star_metallicity_exsitu_xz']),
+            'map_star_metallicity_exsitu_yz': list(hdf5['map_star_metallicity_exsitu_yz'])
+        }
+
+        # Close the HDF5 file
+        hdf5.close()
+
+        return data
+
+    def sum_table(self, save=False):
+        """Put the basic information of all galaxies in a table.
+
+        Parameters
+        ----------
+        save : bool, optional
+            Save the summary table in a npy output. Default: False.
+
+        """
+        summary = Table()
+        summary.add_column(Column(data=np.arange(self.n_gal), name='index'))
+        summary.add_column(Column(data=np.asarray(self.data['catsh_id']), name='catsh_id'))
+        summary.add_column(Column(
+            data=np.asarray(self.data['catgrp_is_primary']), name='cen_flag'))
+        summary.add_column(Column(
+            data=np.log10(np.asarray(self.data['scalar_star_mass'])), name='logms'))
+        summary.add_column(Column(
+            data=np.log10(np.asarray(self.data['catgrp_Group_M_Crit200'])), name='logm200c'))
+        summary.add_column(Column(
+            data=np.asarray(self.data['scalar_star_age']), name='age'))
+        summary.add_column(Column(
+            data=np.log10(np.asarray(self.data['scalar_star_metallicity']) / Z_SUN),
+            name='metallicity'))
+
+        if save:
+            np.save(os.path.join(self.dir, "{}_galaxies.npy".format(self.label)), summary)
+
+        return summary
 
     def get_basic_info(self, idx):
         """Gather basic information of the galaxy.
@@ -98,7 +174,7 @@ class BeneMassAgeZMaps(object):
             'pix':self.pix
         }
 
-    def get_maps(self, idx, proj, verbose=False):
+    def get_maps(self, idx, proj, verbose=False, maps_only=False):
         """Gather the stellar mass, age, metallicity map.
 
         Parameters
@@ -175,5 +251,8 @@ class BeneMassAgeZMaps(object):
         maps = {'mass_ins': mass_ins, 'mass_exs': mass_exs, 'mass_gal': mass_gal,
                 'age_ins': age_ins, 'age_exs': age_exs, 'age_gal': age_gal,
                 'met_ins': met_ins, 'met_exs': met_exs, 'met_gal': met_gal}
+        
+        if maps_only:
+            return maps
 
         return info, maps
