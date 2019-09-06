@@ -79,7 +79,7 @@ class BeneMassAgeZMaps(object):
         else:
             print("# Key: {} is not available!".format(key))
             return None
-    
+
     def get_data(self, hdf5_file):
         """Extract all useful data from the HDF5 file.
 
@@ -91,12 +91,12 @@ class BeneMassAgeZMaps(object):
         """
         hdf5 = h5py.File(self.hdf5_file, 'r')
         data = {
-            'catsh_id': list(hdf5['catsh_id']), 
-            'catgrp_is_primary': list(hdf5['catgrp_is_primary']), 
-            'scalar_star_mass': list(hdf5['scalar_star_mass']), 
-            'catgrp_Group_M_Crit200': list(hdf5['catgrp_Group_M_Crit200']), 
-            'scalar_star_age': list(hdf5['scalar_star_age']), 
-            'scalar_star_metallicity': list(hdf5['scalar_star_metallicity']), 
+            'catsh_id': list(hdf5['catsh_id']),
+            'catgrp_is_primary': list(hdf5['catgrp_is_primary']),
+            'scalar_star_mass': list(hdf5['scalar_star_mass']),
+            'catgrp_Group_M_Crit200': list(hdf5['catgrp_Group_M_Crit200']),
+            'scalar_star_age': list(hdf5['scalar_star_age']),
+            'scalar_star_metallicity': list(hdf5['scalar_star_metallicity']),
             'map_star_rho_insitu_xy': list(hdf5['map_star_rho_insitu_xy']),
             'map_star_rho_insitu_xz': list(hdf5['map_star_rho_insitu_xz']),
             'map_star_rho_insitu_yz': list(hdf5['map_star_rho_insitu_yz']),
@@ -251,7 +251,7 @@ class BeneMassAgeZMaps(object):
         maps = {'mass_ins': mass_ins, 'mass_exs': mass_exs, 'mass_gal': mass_gal,
                 'age_ins': age_ins, 'age_exs': age_exs, 'age_gal': age_gal,
                 'met_ins': met_ins, 'met_exs': met_exs, 'met_gal': met_gal}
-        
+
         if maps_only:
             return maps
 
