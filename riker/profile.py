@@ -11,7 +11,7 @@ import sep
 from astropy.table import Table, Column
 
 import kungpao
-from kungpao.galsbp import galSBP
+from kungpao.sbp import galSBP
 
 from riker import utils
 
