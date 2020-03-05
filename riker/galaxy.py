@@ -544,7 +544,8 @@ class GalaxyMap(object):
 
         # Sometimes Ellipse failed all the way...make sure it is dealt gracefully
         if ell_shape is None:
-            print("# Ellipse fails to get shape for {} of {}".format(map_type, self.info['catsh_id']))
+            print("# Ellipse fails to get shape for {} of {}".format(
+                map_type, self.info['catsh_id']))
         else:
             # Calculate the Fourier amplitude information
             fourier_shape = profile.fourier_profile(ell_shape, pix=self.info['pix'])
@@ -554,7 +555,8 @@ class GalaxyMap(object):
             setattr(self, 'ell_shape_{}'.format(map_type), ell_shape_new.as_array())
 
         if ell_mprof is None:
-            print("# Ellipse fails to get profile for {} of {}".format(map_type, self.info['catsh_id']))
+            print("# Ellipse fails to get profile for {} of {}".format(
+                map_type, self.info['catsh_id']))
         else:
             # Calculate the Fourier amplitude information
             fourier_mprof = profile.fourier_profile(ell_mprof, pix=self.info['pix'])

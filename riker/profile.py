@@ -273,20 +273,25 @@ def ell_prof(fits_name, aper, isophote=ISO, xttools=TBL, pix=1.0,
     elif pa <= -90.0:
         pa = pa + 180.
 
-    try:
-        # Step 2 to get ellipticity and position angle profiles
-        ell_shape, bin_shape = galSBP.galSBP(
-            fits_name, galX=xcen, galY=ycen, maxSma=max_sma, iniSma=ini_sma,
-            verbose=False, savePng=False, saveOut=True, expTime=1.0,
-            pix=pix, zpPhoto=0.0, galQ=ba, galPA=pa, stage=2,
-            minSma=0.0, ellipStep=step, isophote=isophote, xttools=xttools,
-            uppClip=2.5, lowClip=3.0, maxTry=5, nClip=2, intMode=mode,
-            updateIntens=False, harmonics=True)
-        # Add an index array
-        ell_shape.add_column(Column(data=np.arange(len(ell_shape)), name='index'))
-    except Exception:
+    #try:
+    # Step 2 to get ellipticity and position angle profiles
+    ell_shape, bin_shape = galSBP(
+        fits_name, galX=xcen, galY=ycen, maxSma=max_sma, iniSma=ini_sma,
+        verbose=False, savePng=False, saveOut=True, expTime=1.0,
+        pix=pix, zpPhoto=0.0, galQ=ba, galPA=pa, stage=2,
+        minSma=0.0, ellipStep=step, isophote=isophote, xttools=xttools,
+        uppClip=2.5, lowClip=3.0, maxTry=5, nClip=2, intMode=mode,
+        updateIntens=False, harmonics=True)
+    # Add an index array
+    if ell_shape is None:
         print("# Something went wrong during stage 2 for {}".format(fits_name))
         ell_shape, bin_shape = None, None
+    else:
+        ell_shape.add_column(Column(data=np.arange(len(ell_shape)), name='index'))
+    #except Exception as error:
+    #    print("# Something went wrong during stage 2 for {}".format(fits_name))
+    #    print("#  Error Information : ", error)
+    #    ell_shape, bin_shape = None, None
 
     # Update the centroid
     if ell_shape is not None:
@@ -298,7 +303,7 @@ def ell_prof(fits_name, aper, isophote=ISO, xttools=TBL, pix=1.0,
     if in_ellip is None:
         try:
             # Step 3 to get mass density profiles
-            ell_mprof, bin_mprof = galSBP.galSBP(
+            ell_mprof, bin_mprof = galSBP(
                 fits_name, galX=xnew, galY=ynew, maxSma=max_sma, iniSma=ini_sma,
                 verbose=False, savePng=False, saveOut=True, expTime=1.0,
                 pix=pix, zpPhoto=0.0, galQ=ba, galPA=pa, stage=3,
@@ -307,8 +312,9 @@ def ell_prof(fits_name, aper, isophote=ISO, xttools=TBL, pix=1.0,
                 updateIntens=False, harmonics=True)
             # Add an index array
             ell_mprof.add_column(Column(data=np.arange(len(ell_mprof)), name='index'))
-        except Exception:
+        except Exception as error:
             print("# Something went wrong during stage 3 for {}".format(fits_name))
+            print("#  Error Information : ", error)
             ell_mprof, bin_mprof = None, None
     else:
         ell_mprof, bin_mprof = ell_force(
@@ -441,7 +447,7 @@ def ell_force(fits_name, in_ellip, aper, isophote=ISO, xttools=TBL, pix=1.0,
 
     try:
         # Step 4 to get the "forced"-photometry mode of 1-D profile
-        ell_force, bin_force = galSBP.galSBP(
+        ell_force, bin_force = galSBP(
             fits_name, inEllip=in_ellip, galX=xcen, galY=ycen,
             verbose=False, savePng=False, saveOut=True, expTime=1.0,
             pix=pix, zpPhoto=0.0, stage=4, isophote=isophote, xttools=xttools,
